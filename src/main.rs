@@ -399,6 +399,24 @@ fn do_config_check() -> Result<()> {
     }
 }
 
+/// Prints which configured providers have a key loaded from the default secrets
+/// file, for `coder doctor`. A missing key isn't flagged as a problem: some
+/// providers (Ollama) legitimately need none.
+fn report_key_status() -> Result<()> {
+    let providers = load_or_init_providers()?;
+    let real_keys = real_keys_for(&providers, None)?;
+    let mut names: Vec<&String> = providers.keys().collect();
+    names.sort();
+    for name in names {
+        if real_keys.contains_key(name) {
+            println!("  key for `{name}`: loaded");
+        } else {
+            println!("  key for `{name}`: none (fine if this provider needs none, e.g. ollama)");
+        }
+    }
+    Ok(())
+}
+
 /// Check the local environment is actually ready to use `coder`: catches the kind of
 /// thing that otherwise only surfaces as a confusing failure deep into `coder run`
 /// (a missing secrets file, a missing image, a `coder` binary not on PATH).
@@ -425,6 +443,17 @@ fn do_doctor() -> Result<()> {
         }
     }
 
+    for dir in ["containers/sandbox", "containers/proxy"] {
+        if Path::new(dir).is_dir() {
+            println!("{dir}: found");
+        } else {
+            println!(
+                "{dir}: not found here (fine if you're using --fetch/--source-dir \
+                 with `coder build`, otherwise run from a coder checkout)"
+            );
+        }
+    }
+
     if proxy_is_running() {
         println!("proxy: running");
         let ports = std::process::Command::new("podman")
@@ -446,7 +475,12 @@ fn do_doctor() -> Result<()> {
     }
 
     match default_secrets_path() {
-        Ok(path) if path.exists() => println!("secrets file: found at {}", path.display()),
+        Ok(path) if path.exists() => {
+            println!("secrets file: found at {}", path.display());
+            if let Err(e) = report_key_status() {
+                problems.push(format!("secrets file: could not read keys: {e}"));
+            }
+        }
         Ok(path) => println!(
             "secrets file: none at {} (pass --secrets-file, or create it, before `coder \
              proxy up`)",
