@@ -1,0 +1,17 @@
+# builder must match the runtime distro: a newer-glibc builder yields a binary bookworm cannot fully load
+FROM rust:1-slim-bookworm AS builder
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /build
+COPY . .
+RUN cargo build --release --bin coder
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /build/target/release/coder /usr/local/bin/coder
+# /etc/coder/providers.toml is bind-mounted read-only from the host's
+# ~/.config/coder/providers.toml by `coder proxy up`, so host and proxy never diverge.
+ENTRYPOINT ["coder", "proxy-serve"]
