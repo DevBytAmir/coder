@@ -7,3 +7,4 @@ pub mod config;
 pub mod orchestrate;
 pub mod proxy;
 pub mod secrets;
+pub mod source_fetch;

@@ -24,6 +24,7 @@ use coder::orchestrate::project_root::{existing_file_arg, resolve_project_dir};
 use coder::orchestrate::select::resolve_provider_for_run;
 use coder::orchestrate::sorted_joined;
 use coder::secrets::{FileSource, SecretsSource};
+use coder::source_fetch::{fetch_source, find_existing_checkout, looks_like_source_checkout};
 
 /// How long `coder run`/`coder proxy up` wait for a freshly started proxy to answer.
 const PROXY_READY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -587,13 +588,120 @@ fn do_models_list(provider_name: &str) -> Result<()> {
     Ok(())
 }
 
+const GITHUB_REPO: &str = "DevBytAmir/coder";
+
+/// Restores the process's original working directory on drop, so `coder build`
+/// leaves the shell it was run from unaffected even though it has to `chdir` to
+/// build from fetched or `--source-dir` source.
+struct CwdGuard {
+    original: PathBuf,
+}
+
+impl CwdGuard {
+    fn enter(dir: &Path) -> Result<Self> {
+        let original = std::env::current_dir().context("determining current directory")?;
+        std::env::set_current_dir(dir)
+            .with_context(|| format!("changing directory to {}", dir.display()))?;
+        Ok(Self { original })
+    }
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        let _ = std::env::set_current_dir(&self.original);
+    }
+}
+
+/// Holds whatever this build's source resolution needs kept alive: the cwd guard
+/// (dropped first, so the shell's original directory is restored before any temp
+/// directory below is deleted) and, for a `--fetch` without `--keep`, the temp
+/// directory itself (dropped second, deleting it once the build no longer needs it).
+#[allow(dead_code, reason = "fields exist only for their Drop side effects")]
+struct BuildSource {
+    cwd_guard: Option<CwdGuard>,
+    temp_dir: Option<tempfile::TempDir>,
+}
+
+/// Resolves which source tree to build the images from (see `coder build --help` for
+/// the three options).
+fn resolve_build_source(
+    fetch: bool,
+    keep: Option<&Path>,
+    source_dir: Option<&Path>,
+) -> Result<BuildSource> {
+    if fetch {
+        let version = env!("CARGO_PKG_VERSION");
+        if let Some(keep_dir) = keep {
+            if let Some(root) = find_existing_checkout(keep_dir) {
+                println!(
+                    "using source already kept at {} (skipping download)",
+                    root.display()
+                );
+                return Ok(BuildSource {
+                    cwd_guard: Some(CwdGuard::enter(&root)?),
+                    temp_dir: None,
+                });
+            }
+            std::fs::create_dir_all(keep_dir)
+                .with_context(|| format!("creating {}", keep_dir.display()))?;
+            println!(
+                "fetching coder v{version} source from GitHub into {}...",
+                keep_dir.display()
+            );
+            let root = fetch_source(GITHUB_REPO, version, keep_dir)?;
+            return Ok(BuildSource {
+                cwd_guard: Some(CwdGuard::enter(&root)?),
+                temp_dir: None,
+            });
+        }
+        let temp = tempfile::tempdir().context("creating a temp directory")?;
+        println!("fetching coder v{version} source from GitHub...");
+        let root = fetch_source(GITHUB_REPO, version, temp.path())?;
+        return Ok(BuildSource {
+            cwd_guard: Some(CwdGuard::enter(&root)?),
+            temp_dir: Some(temp),
+        });
+    }
+    if let Some(dir) = source_dir {
+        if !looks_like_source_checkout(dir) {
+            bail!(
+                "{} doesn't look like a coder checkout (no Cargo.toml/containers/)",
+                dir.display()
+            );
+        }
+        println!("building from {}", dir.display());
+        return Ok(BuildSource {
+            cwd_guard: Some(CwdGuard::enter(dir)?),
+            temp_dir: None,
+        });
+    }
+    if !looks_like_source_checkout(Path::new(".")) {
+        bail!(
+            "no containers/ directory here; run from a coder checkout, pass \
+             --source-dir <path>, or use --fetch to download the matching source \
+             from GitHub"
+        );
+    }
+    Ok(BuildSource {
+        cwd_guard: None,
+        temp_dir: None,
+    })
+}
+
+fn do_build(fetch: bool, keep: Option<&Path>, source_dir: Option<&Path>) -> Result<()> {
+    let _source = resolve_build_source(fetch, keep, source_dir)?;
+    check_status(run_podman_attached(&build_sandbox_image_args(), &[])?)?;
+    check_status(run_podman_attached(&build_proxy_image_args(), &[])?)
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Build => {
-            check_status(run_podman_attached(&build_sandbox_image_args(), &[])?)?;
-            check_status(run_podman_attached(&build_proxy_image_args(), &[])?)
-        }
+        Command::Build {
+            fetch,
+            keep,
+            source_dir,
+        } => do_build(fetch, keep.as_deref(), source_dir.as_deref()),
         Command::Proxy { action } => match action {
             ProxyAction::Up { secrets_file } => do_proxy_up(secrets_file.as_deref()),
             ProxyAction::Down => print_and_check(&exec_podman(&proxy_down_args(), &[])?),
