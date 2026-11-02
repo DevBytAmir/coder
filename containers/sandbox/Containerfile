@@ -1,0 +1,26 @@
+FROM docker.io/library/node:22-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user: --userns=keep-id at runtime maps this to your real host UID,
+# so files created on the bind-mounted project directory are owned by you,
+# not root or some remapped subuid.
+RUN useradd -m -s /bin/bash coder
+USER coder
+ENV HOME=/home/coder
+ENV PATH="${HOME}/.opencode/bin:${HOME}/.local/bin:${PATH}"
+
+# Official install methods per each project's current docs:
+RUN curl -fsSL https://opencode.ai/install | bash
+RUN curl -LsSf https://aider.chat/install.sh | sh
+# npm's global prefix defaults to root-owned /usr/local; redirect it to the
+# coder user's own (already-on-PATH) ~/.local so a non-root `npm install -g` works.
+RUN npm config set prefix "${HOME}/.local"
+RUN npm install -g @anthropic-ai/claude-code
+
+RUN mkdir -p "${HOME}/.config/opencode"
+COPY --chown=coder:coder opencode.jsonc "${HOME}/.config/opencode/opencode.jsonc"
+
+WORKDIR /workspace

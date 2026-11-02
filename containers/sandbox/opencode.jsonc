@@ -1,0 +1,35 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // `coder/default` is a fixed placeholder: the proxy rewrites the request's model to the
+  // one the session token was minted for (`coder run --model`, or the provider's default_model).
+  "model": "coder/default",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "ls*": "allow",
+      "cat*": "allow",
+      "rm -rf /*": "deny",
+      "rm -rf .": "deny",
+      "rm -rf ~*": "deny",
+      "curl*|*sh": "deny"
+    },
+    "edit": "ask"
+  },
+  "provider": {
+    "coder": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "coder proxy",
+      "options": {
+        // injected by `coder run`: the proxy's address on coder-net and the session token
+        "baseURL": "{env:OPENAI_API_BASE}",
+        "apiKey": "{env:OPENAI_API_KEY}"
+      },
+      "models": {
+        "default": { "name": "coder session model" }
+      }
+    }
+  }
+}
