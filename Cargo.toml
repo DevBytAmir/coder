@@ -25,8 +25,10 @@ axum = "0.7"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 ctrlc = "3"
+tar = "0.4"
+flate2 = "1"
+tempfile = "3"
 
 [dev-dependencies]
-tempfile = "3"
 wiremock = "0.6"
 tower = { version = "0.4", features = ["util"] }

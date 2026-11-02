@@ -11,8 +11,23 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Build the sandbox image
-    Build,
+    /// Build the sandbox and proxy images
+    Build {
+        /// Download the matching tagged source from GitHub and build from it, instead
+        /// of the current directory. For a standalone release binary with no local
+        /// checkout.
+        #[arg(long, conflicts_with = "source_dir")]
+        fetch: bool,
+        /// With --fetch, extract the downloaded source here instead of a temp
+        /// directory that gets deleted after the build. Reused (skipping the
+        /// download) on a later `coder build --fetch --keep` if already present.
+        #[arg(long, requires = "fetch")]
+        keep: Option<PathBuf>,
+        /// Build from an existing local checkout at this path instead of the
+        /// current directory.
+        #[arg(long, conflicts_with = "fetch")]
+        source_dir: Option<PathBuf>,
+    },
     /// Manage the credential proxy
     Proxy {
         #[command(subcommand)]
