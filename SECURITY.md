@@ -35,3 +35,14 @@ reading or modifying anything you mount into its container.
 Only the latest release on the default branch is supported with
 security fixes. There are no older maintained release lines at this
 time.
+
+## Reporting a vulnerability
+
+Please use GitHub's private vulnerability reporting for this
+repository: go to the **Security** tab, then **Report a vulnerability**.
+This opens a private advisory visible only to the maintainer, so
+details (including a working exploit) never need to touch a public
+issue.
+
+Please do not disclose the issue publicly until it has been
+addressed.
