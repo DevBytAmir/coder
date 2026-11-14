@@ -276,6 +276,7 @@ dependencies = [
  "ctrlc",
  "flate2",
  "http",
+ "libc",
  "reqwest",
  "rpassword",
  "serde",

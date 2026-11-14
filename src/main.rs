@@ -735,8 +735,26 @@ fn do_build(fetch: bool, keep: Option<&Path>, source_dir: Option<&Path>) -> Resu
     check_status(run_podman_attached(&build_proxy_image_args(), &[])?)
 }
 
+/// Rust ignores SIGPIPE, so printing to a closed pipe (`coder models list x | head`)
+/// panics instead of exiting quietly like other CLIs. Restore the default for every
+/// command except the proxy server, where a client hanging up mid-response must not kill
+/// the whole process.
+fn restore_default_sigpipe(command: &Command) {
+    #[cfg(unix)]
+    if !matches!(command, Command::ProxyServe) {
+        // SAFETY: called once at startup before any threads exist; setting a signal's
+        // disposition to SIG_DFL has no other preconditions.
+        unsafe {
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = command;
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    restore_default_sigpipe(&cli.command);
     match cli.command {
         Command::Build {
             fetch,

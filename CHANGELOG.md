@@ -23,6 +23,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `coder proxy up` while the proxy is running, and `coder proxy down`
   while it is stopped, now say so and succeed instead of failing with a
   podman error.
+- Piping output into a command that exits early (`coder models list x |
+  head`) no longer panics with "Broken pipe".
 
 ## [0.4.0] - 2026-11-02
 
