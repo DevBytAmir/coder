@@ -11,6 +11,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `ANTHROPIC_API_KEY=""`) are now ignored instead of being loaded as an
   empty key, so `coder doctor` no longer reports an unset provider key
   as loaded.
+- `scripts/install.sh` finds the latest release through the GitHub web
+  redirect instead of the API, which allows only 60 anonymous requests
+  an hour per IP.
 
 ## [0.4.0] - 2026-11-02
 

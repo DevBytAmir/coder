@@ -41,9 +41,15 @@ if [ -n "${CODER_VERSION:-}" ]; then
     TAG="v${CODER_VERSION}"
 else
     say "looking up the latest release..."
-    TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" |
-        grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    [ -n "$TAG" ] || die "could not determine the latest release tag"
+    # The web URL redirects to .../releases/tag/<tag>. Unlike api.github.com, it isn't
+    # limited to 60 anonymous requests an hour per IP, which shared IPs and CI hit.
+    LATEST_URL=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest") ||
+        die "could not look up the latest release of ${REPO} on GitHub"
+    TAG=${LATEST_URL##*/tag/}
+    case "$TAG" in
+        v[0-9]*) ;;
+        *) die "could not determine the latest release tag (got ${LATEST_URL})" ;;
+    esac
 fi
 
 BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
