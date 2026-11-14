@@ -5,6 +5,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `coder --version` / `-V`.
+
 ### Fixed
 
 - Secrets-file entries with a blank value (e.g. `ANTHROPIC_API_KEY=` or
