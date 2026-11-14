@@ -16,9 +16,9 @@ use coder::orchestrate::guard::guard_confirm;
 use coder::orchestrate::podman::{
     build_proxy_image_args, build_sandbox_image_args, exec_podman, network_create_args,
     network_exists_args, network_is_internal_args, network_rm_args, proxy_admin_args,
-    proxy_admin_revoke_args, proxy_down_args, proxy_status_args, proxy_up_args, proxy_up_env,
-    run_podman_attached, run_tool_args, validate_bind_source, EGRESS_NETWORK, NETWORK,
-    REVOKE_TOKEN_ENV,
+    proxy_admin_revoke_args, proxy_down_args, proxy_exists_args, proxy_status_args, proxy_up_args,
+    proxy_up_env, run_podman_attached, run_tool_args, validate_bind_source, EGRESS_NETWORK,
+    NETWORK, REVOKE_TOKEN_ENV,
 };
 use coder::orchestrate::project_root::{existing_file_arg, resolve_project_dir};
 use coder::orchestrate::select::resolve_provider_for_run;
@@ -156,6 +156,13 @@ fn wait_for_proxy_ready() -> Result<()> {
 }
 
 fn do_proxy_up(secrets_file: Option<&Path>) -> Result<()> {
+    if proxy_is_running() {
+        println!(
+            "proxy already running; run `coder proxy down` first to restart it (e.g. after \
+             changing keys)"
+        );
+        return Ok(());
+    }
     let providers = load_or_init_providers()?;
     let real_keys = real_keys_for(&providers, secrets_file)?;
 
@@ -738,7 +745,14 @@ fn main() -> Result<()> {
         } => do_build(fetch, keep.as_deref(), source_dir.as_deref()),
         Command::Proxy { action } => match action {
             ProxyAction::Up { secrets_file } => do_proxy_up(secrets_file.as_deref()),
-            ProxyAction::Down => print_and_check(&exec_podman(&proxy_down_args(), &[])?),
+            ProxyAction::Down => {
+                if exec_podman(&proxy_exists_args(), &[])?.status.success() {
+                    print_and_check(&exec_podman(&proxy_down_args(), &[])?)
+                } else {
+                    println!("proxy is not running");
+                    Ok(())
+                }
+            }
             ProxyAction::Status => {
                 print_and_check(&exec_podman(&proxy_status_args(), &[])?)?;
                 if let Ok(status) = admin_call("GET", "/admin/status", None) {

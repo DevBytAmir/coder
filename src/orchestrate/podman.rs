@@ -214,6 +214,16 @@ pub fn proxy_down_args() -> Vec<String> {
     vec!["stop".to_string(), PROXY_CONTAINER_NAME.to_string()]
 }
 
+/// Build args that exit 0 if the proxy container exists.
+#[must_use]
+pub fn proxy_exists_args() -> Vec<String> {
+    vec![
+        "container".to_string(),
+        "exists".to_string(),
+        PROXY_CONTAINER_NAME.to_string(),
+    ]
+}
+
 /// Build args to check whether the proxy container is running.
 #[must_use]
 pub fn proxy_status_args() -> Vec<String> {

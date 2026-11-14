@@ -20,6 +20,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   inside containers.
 - `coder models refresh` for Anthropic-format providers requests
   `/v1/models` with an `anthropic-version` header, instead of `/models`.
+- `coder proxy up` while the proxy is running, and `coder proxy down`
+  while it is stopped, now say so and succeed instead of failing with a
+  podman error.
 
 ## [0.4.0] - 2026-11-02
 
