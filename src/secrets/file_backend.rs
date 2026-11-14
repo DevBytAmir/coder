@@ -53,7 +53,9 @@ impl SecretsSource for FileSource {
             }
             if let Some((key, value)) = line.split_once('=') {
                 let value = strip_matching_quotes(value.trim());
-                parsed.insert(key.trim().to_string(), value.to_string());
+                if !value.is_empty() {
+                    parsed.insert(key.trim().to_string(), value.to_string());
+                }
             }
         }
 
@@ -90,6 +92,24 @@ mod tests {
         let keys = source.load(&["anthropic".into()]).unwrap();
         assert_eq!(keys.get("anthropic"), Some(&"abc".to_string()));
         assert!(!keys.contains_key("nim"));
+    }
+
+    #[test]
+    fn file_source_skips_blank_values() {
+        // Regression: a line like `ANTHROPIC_API_KEY=` (never filled in) was still
+        // inserted with an empty value, so callers checking `contains_key` (e.g.
+        // `coder doctor`'s key-status report) wrongly reported the key as loaded.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("secrets.env");
+        std::fs::write(&path, "ANTHROPIC_API_KEY=\nNIM_API_KEY=def\n").unwrap();
+        set_owner_only(&path);
+        let source = FileSource { path };
+        let keys = source.load(&["anthropic".into(), "nim".into()]).unwrap();
+        assert!(
+            !keys.contains_key("anthropic"),
+            "blank value should not count as loaded"
+        );
+        assert_eq!(keys.get("nim"), Some(&"def".to_string()));
     }
 
     #[test]

@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- Secrets-file entries with a blank value (e.g. `ANTHROPIC_API_KEY=` or
+  `ANTHROPIC_API_KEY=""`) are now ignored instead of being loaded as an
+  empty key, so `coder doctor` no longer reports an unset provider key
+  as loaded.
+
 ## [0.4.0] - 2026-11-02
 
 ### Added
@@ -65,6 +74,7 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Verified live end to end against real NVIDIA NIM, OpenRouter, and
   Ollama providers.
 
+[Unreleased]: https://github.com/DevBytAmir/coder/compare/v0.4.0...HEAD
 [0.4.0]: https://github.com/DevBytAmir/coder/releases/tag/v0.4.0
 [0.3.0]: https://github.com/DevBytAmir/coder/releases/tag/v0.3.0
 [0.2.0]: https://github.com/DevBytAmir/coder/releases/tag/v0.2.0
