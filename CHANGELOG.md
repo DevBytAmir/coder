@@ -14,6 +14,7 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `scripts/install.sh` finds the latest release through the GitHub web
   redirect instead of the API, which allows only 60 anonymous requests
   an hour per IP.
+- A missing secrets file is reported with its path.
 
 ## [0.4.0] - 2026-11-02
 

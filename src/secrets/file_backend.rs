@@ -5,6 +5,8 @@ use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
+use anyhow::Context;
+
 use crate::secrets::SecretsSource;
 
 fn strip_matching_quotes(value: &str) -> &str {
@@ -27,7 +29,8 @@ pub struct FileSource {
 impl SecretsSource for FileSource {
     fn load(&self, provider_names: &[String]) -> anyhow::Result<HashMap<String, String>> {
         // Check permissions on the open fd, not the path, to avoid a swap/chmod race.
-        let mut file = File::open(&self.path)?;
+        let mut file = File::open(&self.path)
+            .with_context(|| format!("opening secrets file {}", self.path.display()))?;
         #[cfg(unix)]
         {
             let mode = file.metadata()?.permissions().mode();
