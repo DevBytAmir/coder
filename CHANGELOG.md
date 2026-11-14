@@ -15,6 +15,11 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   redirect instead of the API, which allows only 60 anonymous requests
   an hour per IP.
 - A missing secrets file is reported with its path.
+- `coder models refresh` works for providers without a key (Ollama),
+  and for upstreams at `host.containers.internal`, which only resolves
+  inside containers.
+- `coder models refresh` for Anthropic-format providers requests
+  `/v1/models` with an `anthropic-version` header, instead of `/models`.
 
 ## [0.4.0] - 2026-11-02
 

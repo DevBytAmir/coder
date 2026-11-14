@@ -6,8 +6,9 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::Value;
 
-use coder::config::providers::ProviderConfig;
+use coder::config::providers::{ProviderConfig, WireFormat};
 use coder::orchestrate::sorted_joined;
+use coder::proxy::translator::upstream_url;
 
 /// Model ids that are almost never a general-purpose chat model, matched against a
 /// provider's `/v1/models` id when that provider gives us no capability metadata to
@@ -72,21 +73,40 @@ struct OpenRouterPricing {
 /// Fetch `{upstream}/models` using the provider's own configured auth header (not
 /// always `Authorization: Bearer`; Anthropic, for example, needs `x-api-key` with no
 /// prefix) and return the raw JSON body.
-pub fn fetch_models_json(
-    upstream: &str,
-    api_key: &str,
-    auth_header_name: &str,
-    auth_header_prefix: &str,
-) -> Result<Value> {
-    let url = format!("{}/models", upstream.trim_end_matches('/'));
-    let value = if auth_header_prefix.is_empty() {
-        api_key.to_string()
-    } else {
-        format!("{auth_header_prefix} {api_key}")
-    };
-    let resp = reqwest::blocking::Client::new()
-        .get(&url)
-        .header(auth_header_name, value)
+/// `upstream` as reachable from the host: `host.containers.internal` (and Docker's
+/// `host.docker.internal`) only resolve inside containers, and both mean this host.
+fn host_side_url(upstream: &str) -> String {
+    match reqwest::Url::parse(upstream) {
+        Ok(mut url)
+            if matches!(
+                url.host_str(),
+                Some("host.containers.internal" | "host.docker.internal")
+            ) =>
+        {
+            let _ = url.set_host(Some("localhost"));
+            url.to_string()
+        }
+        _ => upstream.to_string(),
+    }
+}
+
+/// Fetch `provider`'s model list, building the URL the way the proxy does. Without
+/// `api_key` no auth header is sent, as the proxy does for keyless providers like Ollama.
+pub fn fetch_models_json(provider: &ProviderConfig, api_key: Option<&str>) -> Result<Value> {
+    let url = upstream_url(&host_side_url(&provider.upstream), "/v1/models");
+    let mut request = reqwest::blocking::Client::new().get(&url);
+    if provider.wire_format == WireFormat::AnthropicMessages {
+        request = request.header("anthropic-version", "2023-06-01");
+    }
+    if let Some(api_key) = api_key {
+        let value = if provider.auth_header_prefix.is_empty() {
+            api_key.to_string()
+        } else {
+            format!("{} {api_key}", provider.auth_header_prefix)
+        };
+        request = request.header(&provider.auth_header_name, value);
+    }
+    let resp = request
         .send()
         .with_context(|| format!("fetching model list from {url}"))?;
     let status = resp.status();
@@ -98,7 +118,12 @@ pub fn fetch_models_json(
         // text or HTML (e.g. from a gateway in front of the real API), and trying to
         // JSON-parse that first would surface a confusing parse error instead of the
         // actual HTTP failure (e.g. an invalid key).
-        anyhow::bail!("{url} returned {status}: {text}");
+        let hint = if api_key.is_none() && matches!(status.as_u16(), 401 | 403) {
+            " (no key is loaded for this provider; add it to your secrets file or pass --secrets-file)"
+        } else {
+            ""
+        };
+        anyhow::bail!("{url} returned {status}{hint}: {text}");
     }
     serde_json::from_str(&text).with_context(|| format!("parsing model list response from {url}"))
 }
@@ -285,18 +310,7 @@ pub fn refresh_one_provider(
         let list = sorted_joined(providers.keys());
         anyhow::anyhow!("unknown provider `{provider_name}`; configured providers: {list}")
     })?;
-    let api_key = real_keys.get(provider_name).with_context(|| {
-        format!(
-            "no key loaded for `{provider_name}`; add it to your secrets file or pass --secrets-file"
-        )
-    })?;
-
-    let raw = fetch_models_json(
-        &provider.upstream,
-        api_key,
-        &provider.auth_header_name,
-        &provider.auth_header_prefix,
-    )?;
+    let raw = fetch_models_json(provider, real_keys.get(provider_name).map(String::as_str))?;
     let filtered = filter_chat_models(provider_name, &raw)?;
     println!(
         "{} candidate chat models for `{provider_name}`",
@@ -423,5 +437,102 @@ mod tests {
         assert_eq!(all.len(), 2);
         assert_eq!(all["nim"], vec!["nim/a".to_string()]);
         assert_eq!(all["openrouter"], vec!["or/b".to_string()]);
+    }
+
+    fn openai(upstream: &str) -> ProviderConfig {
+        ProviderConfig {
+            upstream: upstream.to_string(),
+            wire_format: WireFormat::OpenAiChatCompletions,
+            auth_header_name: "Authorization".to_string(),
+            auth_header_prefix: "Bearer".to_string(),
+            path_override: None,
+            default_model: None,
+        }
+    }
+
+    #[test]
+    fn anthropic_format_upstreams_get_v1_models_and_a_version_header() {
+        let (url, server) = one_shot_server("200 OK");
+        let mut p = openai(url.trim_end_matches("/v1"));
+        p.wire_format = WireFormat::AnthropicMessages;
+        fetch_models_json(&p, None).unwrap();
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(request.starts_with("get /v1/models "), "{request}");
+        assert!(
+            request.contains("anthropic-version: 2023-06-01"),
+            "{request}"
+        );
+    }
+
+    /// Serve one HTTP request on a local port with `status`, returning the base URL and
+    /// a handle that yields the raw request text.
+    fn one_shot_server(status: &str) -> (String, std::thread::JoinHandle<String>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/v1", listener.local_addr().unwrap());
+        let status = status.to_string();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).unwrap();
+            let body = r#"{"data":[{"id":"m1"}]}"#;
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            String::from_utf8_lossy(&buf[..n]).into_owned()
+        });
+        (url, handle)
+    }
+
+    #[test]
+    fn fetch_without_a_key_sends_no_auth_header() {
+        let (url, server) = one_shot_server("200 OK");
+        let raw = fetch_models_json(&openai(&url), None).unwrap();
+        assert_eq!(raw["data"][0]["id"], "m1");
+        let request = server.join().unwrap().to_ascii_lowercase();
+        assert!(request.starts_with("get /v1/models "), "{request}");
+        assert!(!request.contains("authorization:"), "{request}");
+    }
+
+    #[test]
+    fn fetch_with_a_key_sends_it_with_the_provider_prefix() {
+        let (url, server) = one_shot_server("200 OK");
+        let mut p = openai(&url);
+        p.auth_header_name = "x-api-key".into();
+        p.auth_header_prefix = String::new();
+        fetch_models_json(&p, Some("k1")).unwrap();
+        assert!(server
+            .join()
+            .unwrap()
+            .to_ascii_lowercase()
+            .contains("x-api-key: k1"));
+    }
+
+    #[test]
+    fn keyless_auth_failure_hints_that_a_key_is_needed() {
+        let (url, server) = one_shot_server("401 Unauthorized");
+        let err = fetch_models_json(&openai(&url), None).unwrap_err();
+        server.join().unwrap();
+        assert!(err.to_string().contains("no key is loaded"), "{err}");
+    }
+
+    #[test]
+    fn container_only_host_names_become_localhost_on_the_host() {
+        assert_eq!(
+            host_side_url("http://host.containers.internal:11434/v1"),
+            "http://localhost:11434/v1"
+        );
+        assert_eq!(
+            host_side_url("http://host.docker.internal:11434/v1"),
+            "http://localhost:11434/v1"
+        );
+        assert_eq!(
+            host_side_url("https://openrouter.ai/api/v1"),
+            "https://openrouter.ai/api/v1"
+        );
+        assert_eq!(host_side_url("not a url"), "not a url");
     }
 }
