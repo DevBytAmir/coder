@@ -18,8 +18,8 @@ use coder::orchestrate::podman::{
     build_proxy_image_args, build_sandbox_image_args, exec_podman, network_create_args,
     network_exists_args, network_is_internal_args, network_rm_args, proxy_admin_args,
     proxy_admin_revoke_args, proxy_down_args, proxy_exists_args, proxy_status_args, proxy_up_args,
-    proxy_up_env, run_podman_attached, run_tool_args, validate_bind_source, EGRESS_NETWORK,
-    NETWORK, REVOKE_TOKEN_ENV,
+    proxy_up_env, run_podman_attached, run_tool_args, validate_bind_source, RunContainer,
+    EGRESS_NETWORK, NETWORK, REVOKE_TOKEN_ENV,
 };
 use coder::orchestrate::project_root::{existing_file_arg, resolve_project_dir};
 use coder::orchestrate::select::resolve_provider_for_run;
@@ -290,6 +290,9 @@ fn do_run(args: &RunArgs) -> Result<i32> {
         resolve_project_dir(tool.project_root, &effective_cwd, root_arg.as_deref())?;
     validate_bind_source(&project_dir)?;
 
+    let run_id = uuid::Uuid::new_v4().simple().to_string();
+    let container = RunContainer::new(&args.tool, &run_id[..12]);
+
     if args.dry_run {
         let extra_args = combine_extra_args(rewritten, &args.extra_args);
         let (cli_model, _) = resolve_models(args, provider, tool);
@@ -300,6 +303,7 @@ fn do_run(args: &RunArgs) -> Result<i32> {
             provider,
             cli_model.as_deref(),
             std::io::stdin().is_terminal() && std::io::stdout().is_terminal(),
+            &container,
         );
         podman_args.extend(extra_args);
         println!("podman {}", podman_args.join(" "));
@@ -372,6 +376,7 @@ fn do_run(args: &RunArgs) -> Result<i32> {
         provider,
         cli_model.as_deref(),
         std::io::stdin().is_terminal() && std::io::stdout().is_terminal(),
+        &container,
     );
     podman_args.extend(extra_args);
 

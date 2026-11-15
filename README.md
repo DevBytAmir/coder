@@ -150,6 +150,8 @@ coder run claude --provider anthropic -C /abs/path/to/project --yes \
   one-shot run has no one to ask; its deny rules still apply. Redirect
   stdin from `/dev/null` so a tool that reads piped input can't block
   on it.
+- Each run's container is named `coder-run-<tool>-<id>` and labelled
+  `coder.run`: `podman ps --filter label=coder.run` lists active runs.
 
 Exit codes:
 

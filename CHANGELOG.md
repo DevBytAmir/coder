@@ -14,6 +14,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   dangerous directories.
 - A "Scripts and agents" section in the README, with the exit codes
   `coder` uses.
+- Tool containers are labelled `coder.run`, so `podman ps --filter
+  label=coder.run` lists active runs.
 
 ### Changed
 
@@ -25,6 +27,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   instead of 1.
 - The sandbox-guard prompt is written to stderr, so it stays visible
   when stdout is piped.
+- Tool containers are named `coder-run-<tool>-<id>` instead of getting
+  a random podman name, so parallel runs can each be addressed.
 
 ### Fixed
 

@@ -246,6 +246,35 @@ fn tool_env_names(format: WireFormat) -> (&'static [&'static str], &'static str)
     }
 }
 
+/// Label on every tool container, for `podman ps --filter label=coder.run`.
+pub const RUN_LABEL: &str = "coder.run";
+
+/// One `coder run` tool container, with a unique name so parallel runs don't collide.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunContainer {
+    pub name: String,
+}
+
+impl RunContainer {
+    /// `coder-run-<tool>-<run_id>`, with characters podman rejects in names replaced by `-`.
+    #[must_use]
+    pub fn new(tool: &str, run_id: &str) -> Self {
+        let tool: String = tool
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '-') {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect();
+        Self {
+            name: format!("coder-run-{tool}-{run_id}"),
+        }
+    }
+}
+
 /// Build args to run a tool container against the shared network and proxy.
 /// Returns `(argv, env)`: the session token is passed by name only in argv (`-e NAME`) and
 /// its value travels in `env`, which the caller sets on the podman process, keeping it out
@@ -258,10 +287,14 @@ pub fn run_tool_args(
     provider: &ProviderConfig,
     model: Option<&str>,
     tty: bool,
+    container: &RunContainer,
 ) -> (Vec<String>, Vec<(String, String)>) {
     let mut args = vec![
         "run".to_string(),
         "--rm".to_string(),
+        "--name".to_string(),
+        container.name.clone(),
+        format!("--label={RUN_LABEL}=1"),
         // -t only when attached to a real terminal; podman errors on -t without one
         if tty { "-it" } else { "-i" }.to_string(),
         "--userns=keep-id:uid=1001,gid=1001".to_string(),
@@ -385,6 +418,7 @@ mod tests {
             &provider,
             None,
             true,
+            &RunContainer::new("test", "id"),
         );
         assert!(args.iter().any(|a| a == "coder-net"));
         assert!(!args.iter().any(|a| a == "host"));
@@ -401,6 +435,7 @@ mod tests {
             &provider,
             None,
             true,
+            &RunContainer::new("test", "id"),
         );
         assert!(args.iter().any(|a| a == "--cap-drop=ALL"));
         assert!(args.iter().any(|a| a == "--security-opt=no-new-privileges"));
@@ -419,6 +454,7 @@ mod tests {
             &provider,
             None,
             true,
+            &RunContainer::new("test", "id"),
         );
         assert!(args
             .iter()
@@ -430,7 +466,15 @@ mod tests {
     fn run_tool_args_keeps_session_token_out_of_argv() {
         let tool = test_tool_config();
         let provider = test_provider_config();
-        let (args, env) = run_tool_args(&tool, Path::new("/p"), "tok-xyz", &provider, None, true);
+        let (args, env) = run_tool_args(
+            &tool,
+            Path::new("/p"),
+            "tok-xyz",
+            &provider,
+            None,
+            true,
+            &RunContainer::new("test", "id"),
+        );
         assert!(!args.iter().any(|a| a.contains("tok-xyz")));
         assert!(args.iter().any(|a| a == "OPENAI_API_KEY"));
         assert_eq!(
@@ -444,7 +488,15 @@ mod tests {
         let tool = test_tool_config();
         let mut provider = test_provider_config();
         provider.wire_format = WireFormat::AnthropicMessages;
-        let (args, env) = run_tool_args(&tool, Path::new("/p"), "tok-a", &provider, None, true);
+        let (args, env) = run_tool_args(
+            &tool,
+            Path::new("/p"),
+            "tok-a",
+            &provider,
+            None,
+            true,
+            &RunContainer::new("test", "id"),
+        );
         assert!(args.iter().any(|a| a == "ANTHROPIC_API_KEY"));
         assert_eq!(
             env,
@@ -456,7 +508,15 @@ mod tests {
     fn run_tool_args_passes_model_via_tool_template() {
         let tool = test_tool_config(); // aider
         let provider = test_provider_config();
-        let (args, _) = run_tool_args(&tool, Path::new("/p"), "t", &provider, Some("m1"), true);
+        let (args, _) = run_tool_args(
+            &tool,
+            Path::new("/p"),
+            "t",
+            &provider,
+            Some("m1"),
+            true,
+            &RunContainer::new("test", "id"),
+        );
         let tail: Vec<&str> = args
             .iter()
             .rev()
@@ -500,6 +560,7 @@ mod tests {
             &test_provider_config(),
             None,
             true,
+            &RunContainer::new("test", "id"),
         );
         assert!(tool_args.iter().any(|a| a == NETWORK));
         assert!(!tool_args.iter().any(|a| a == EGRESS_NETWORK));
@@ -572,7 +633,15 @@ mod tests {
     fn run_tool_args_uses_coder_proxy_hostname_for_openai() {
         let tool = test_tool_config();
         let provider = test_provider_config();
-        let (args, _) = run_tool_args(&tool, Path::new("/p"), "tok-123", &provider, None, true);
+        let (args, _) = run_tool_args(
+            &tool,
+            Path::new("/p"),
+            "tok-123",
+            &provider,
+            None,
+            true,
+            &RunContainer::new("test", "id"),
+        );
         assert!(args
             .iter()
             .any(|a| a == "OPENAI_API_BASE=http://coder-proxy:8080/v1"));
@@ -583,7 +652,15 @@ mod tests {
         let tool = test_tool_config();
         let mut provider = test_provider_config();
         provider.wire_format = WireFormat::AnthropicMessages;
-        let (args, _) = run_tool_args(&tool, Path::new("/p"), "tok-123", &provider, None, true);
+        let (args, _) = run_tool_args(
+            &tool,
+            Path::new("/p"),
+            "tok-123",
+            &provider,
+            None,
+            true,
+            &RunContainer::new("test", "id"),
+        );
         assert!(args
             .iter()
             .any(|a| a == "ANTHROPIC_BASE_URL=http://coder-proxy:8080"));
@@ -593,7 +670,15 @@ mod tests {
     fn run_tool_args_omits_tty_flag_without_a_terminal() {
         let tool = test_tool_config();
         let provider = test_provider_config();
-        let (args, _) = run_tool_args(&tool, Path::new("/p"), "t", &provider, None, false);
+        let (args, _) = run_tool_args(
+            &tool,
+            Path::new("/p"),
+            "t",
+            &provider,
+            None,
+            false,
+            &RunContainer::new("test", "id"),
+        );
         assert!(args.iter().any(|a| a == "-i"));
         assert!(!args.iter().any(|a| a == "-it"));
     }
@@ -636,5 +721,34 @@ mod tests {
     fn proxy_up_args_publishes_no_ports() {
         let args = proxy_up_args(&HashMap::new(), Path::new("/p.toml"), None);
         assert!(!args.iter().any(|a| a == "-p" || a == "--publish"));
+    }
+
+    #[test]
+    fn run_tool_args_names_and_labels_the_container() {
+        let container = RunContainer::new("claude", "abc123");
+        let (args, _) = run_tool_args(
+            &test_tool_config(),
+            Path::new("/p"),
+            "t",
+            &test_provider_config(),
+            None,
+            false,
+            &container,
+        );
+        let name_at = args.iter().position(|a| a == "--name").unwrap();
+        assert_eq!(args[name_at + 1], "coder-run-claude-abc123");
+        assert!(args.iter().any(|a| a == "--label=coder.run=1"));
+    }
+
+    #[test]
+    fn run_container_name_is_podman_safe() {
+        assert_eq!(
+            RunContainer::new("claude", "ab12").name,
+            "coder-run-claude-ab12"
+        );
+        assert_eq!(
+            RunContainer::new("my tool/x", "ab12").name,
+            "coder-run-my-tool-x-ab12"
+        );
     }
 }
