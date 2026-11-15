@@ -23,6 +23,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Optional per-tool `memory` and `cpus` limits in `tools.toml`, passed
   to podman as `--memory`/`--cpus` and validated when the file loads.
 - `coder doctor --json`: machine-readable results on stdout.
+- `coder doctor` checks that each provider's upstream answers from the
+  proxy's network, using a throwaway container and no credentials. An
+  unreachable provider is a problem if it has a key loaded, and
+  information otherwise.
 
 ### Changed
 

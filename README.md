@@ -108,7 +108,7 @@ coder run <tool> [-C dir] [--provider X] [--model Y] [--yes] [--timeout D] [--dr
 coder models refresh <provider>|--all [--secrets-file P]  # fetch + filter a provider's models
 coder models list <provider>         # print a provider's refreshed model ids
 coder config check                   # validate providers.toml/tools.toml, no live key needed
-coder doctor [--json]                # check podman, images, proxy, secrets file, PATH are all ready
+coder doctor [--json]                # check podman, images, proxy, secrets file, PATH, provider reachability
 coder completions <shell>            # print a completion script (bash/zsh/fish/...)
 coder init                           # interactive first-run setup wizard
 ```

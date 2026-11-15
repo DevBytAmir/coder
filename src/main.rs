@@ -16,11 +16,11 @@ use coder::exit::{self, ExitError};
 use coder::orchestrate::guard::{guard_confirm, Confirmation};
 use coder::orchestrate::podman::{
     build_proxy_image_args, build_sandbox_image_args, exec_podman, network_create_args,
-    network_exists_args, network_is_internal_args, network_rm_args, proxy_admin_args,
-    proxy_admin_revoke_args, proxy_down_args, proxy_exists_args, proxy_status_args, proxy_up_args,
-    proxy_up_env, run_podman_attached, run_podman_attached_with_timeout, run_tool_args,
-    stop_container_args, validate_bind_source, RunContainer, RunOutcome, EGRESS_NETWORK, NETWORK,
-    REVOKE_TOKEN_ENV, STOP_GRACE,
+    network_exists_args, network_is_internal_args, network_rm_args, parse_probe_output,
+    provider_probe_args, proxy_admin_args, proxy_admin_revoke_args, proxy_down_args,
+    proxy_exists_args, proxy_status_args, proxy_up_args, proxy_up_env, run_podman_attached,
+    run_podman_attached_with_timeout, run_tool_args, stop_container_args, validate_bind_source,
+    RunContainer, RunOutcome, EGRESS_NETWORK, NETWORK, REVOKE_TOKEN_ENV, STOP_GRACE,
 };
 use coder::orchestrate::project_root::{existing_file_arg, resolve_project_dir};
 use coder::orchestrate::select::resolve_provider_for_run;
@@ -536,6 +536,7 @@ fn doctor_checks() -> Vec<Check> {
 
     proxy_checks(&mut checks);
     secrets_checks(&mut checks);
+    provider_reach_checks(&mut checks);
     binary_check(&mut checks);
     checks
 }
@@ -574,6 +575,69 @@ fn proxy_checks(checks: &mut Vec<Check>) {
             "not running (run `coder proxy up` when you need it)",
         ));
     }
+}
+
+/// Whether each provider's upstream answers from `coder-egress`, the proxy's network.
+/// Unreachable is only a problem for a provider with a key loaded: the defaults include
+/// providers many users never use.
+fn provider_reach_checks(checks: &mut Vec<Check>) {
+    let skip = |checks: &mut Vec<Check>, why: &str| {
+        checks.push(Check::new("provider reachability", CheckStatus::Info, why));
+    };
+    let ready = |args: &[String]| exec_podman(args, &[]).is_ok_and(|o| o.status.success());
+    if !ready(&network_exists_args(EGRESS_NETWORK)) {
+        return skip(
+            checks,
+            "skipped: the proxy network is created by `coder proxy up`",
+        );
+    }
+    if !ready(&["image".into(), "exists".into(), "coder-sandbox".into()]) {
+        return skip(checks, "skipped: needs the coder-sandbox image");
+    }
+    let Result::Ok(providers) = load_or_init_providers() else {
+        return skip(checks, "skipped: providers.toml could not be loaded");
+    };
+    let keys = real_keys_for(&providers, None).unwrap_or_default();
+    let mut targets: Vec<(String, String)> = providers
+        .iter()
+        .map(|(name, p)| (name.clone(), p.upstream.clone()))
+        .collect();
+    targets.sort();
+    let codes = match exec_podman(&provider_probe_args(&targets), &[]) {
+        Result::Ok(out) => parse_probe_output(&String::from_utf8_lossy(&out.stdout)),
+        Err(e) => return skip(checks, &format!("skipped: could not run the probe: {e}")),
+    };
+    for (name, upstream) in &targets {
+        let code = codes.get(name).copied().unwrap_or(0);
+        checks.push(reach_check(name, upstream, code, keys.contains_key(name)));
+    }
+}
+
+fn reach_check(name: &str, upstream: &str, code: u16, has_key: bool) -> Check {
+    let check_name = format!("provider `{name}`");
+    if code != 0 {
+        return Check::new(
+            check_name,
+            CheckStatus::Ok,
+            format!("reachable from the proxy network (HTTP {code})"),
+        );
+    }
+    let status = if has_key {
+        CheckStatus::Problem
+    } else {
+        CheckStatus::Info
+    };
+    let mut detail = format!("unreachable from the proxy network at {upstream}");
+    if upstream.contains("host.containers.internal") {
+        detail.push_str(
+            ". If it runs on this host, check it's listening; podman's host route can also go \
+             stale after a network change: stop all podman containers on bridge networks to \
+             reset it, or set `upstream` to this host's IP",
+        );
+    } else if !has_key {
+        detail.push_str(" (fine if you don't use this provider)");
+    }
+    Check::new(check_name, status, detail)
 }
 
 fn secrets_checks(checks: &mut Vec<Check>) {
@@ -979,5 +1043,41 @@ fn run_cli() -> Result<()> {
             proxy_entrypoint::run_proxy_admin(&method, &path, body.as_deref())
         }
         Command::ProxyAdminRevokeSelf => proxy_entrypoint::run_proxy_admin_revoke_self(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reachable_providers_are_ok_whatever_the_http_status() {
+        for code in [200, 401, 404] {
+            let check = reach_check("nim", "https://x", code, true);
+            assert!(check.status == CheckStatus::Ok, "{code}");
+        }
+    }
+
+    #[test]
+    fn unreachable_is_a_problem_only_with_a_key_loaded() {
+        assert!(reach_check("nim", "https://x", 0, true).status == CheckStatus::Problem);
+        let unused = reach_check("openrouter", "https://x", 0, false);
+        assert!(unused.status == CheckStatus::Info);
+        assert!(unused.detail.contains("fine if you don't use"));
+    }
+
+    #[test]
+    fn unreachable_host_service_explains_the_stale_route_fix() {
+        let check = reach_check(
+            "ollama",
+            "http://host.containers.internal:11434/v1",
+            0,
+            false,
+        );
+        assert!(
+            check.detail.contains("set `upstream` to this host's IP"),
+            "{}",
+            check.detail
+        );
     }
 }

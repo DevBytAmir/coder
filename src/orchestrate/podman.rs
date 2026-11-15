@@ -430,6 +430,52 @@ pub fn run_podman_attached(
     Ok(status)
 }
 
+/// Probes each `(name, url)` in parallel from a throwaway sandbox container on
+/// `coder-egress`, the network the proxy reaches upstreams through, printing one
+/// `<name> <http status>` line per target (`000` when nothing answered). Targets travel as
+/// positional arguments, never spliced into the script. No credentials are sent.
+const PROBE_SCRIPT: &str = r#"while [ $# -gt 1 ]; do
+  ( printf '%s %s\n' "$1" "$(curl -s -o /dev/null --connect-timeout 4 -m 6 -w '%{http_code}' "$2")" ) &
+  shift 2
+done
+wait"#;
+
+/// Build args for the upstream reachability probe; see [`PROBE_SCRIPT`].
+#[must_use]
+pub fn provider_probe_args(targets: &[(String, String)]) -> Vec<String> {
+    let mut args = vec![
+        "run".to_string(),
+        "--rm".to_string(),
+        "--network".to_string(),
+        EGRESS_NETWORK.to_string(),
+        "--cap-drop=ALL".to_string(),
+        "--security-opt=no-new-privileges".to_string(),
+        "--entrypoint".to_string(),
+        "sh".to_string(),
+        "coder-sandbox".to_string(),
+        "-c".to_string(),
+        PROBE_SCRIPT.to_string(),
+        "sh".to_string(),
+    ];
+    for (name, url) in targets {
+        args.push(name.clone());
+        args.push(url.clone());
+    }
+    args
+}
+
+/// Parse the probe's output into `name -> HTTP status` (0 when nothing answered).
+#[must_use]
+pub fn parse_probe_output(output: &str) -> HashMap<String, u16> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let (name, code) = line.trim().rsplit_once(' ')?;
+            Some((name.to_string(), code.parse().ok()?))
+        })
+        .collect()
+}
+
 #[derive(Debug)]
 pub enum RunOutcome {
     Exited(ExitStatus),
@@ -973,5 +1019,41 @@ mod tests {
             panic!("expected exit, got {outcome:?}");
         };
         assert_eq!(status.code(), Some(7));
+    }
+
+    #[test]
+    fn provider_probe_passes_targets_as_arguments_not_script_text() {
+        let targets = vec![
+            ("ollama".to_string(), "http://h:11434/v1".to_string()),
+            (
+                "evil".to_string(),
+                "http://x/$(touch /tmp/pwned)".to_string(),
+            ),
+        ];
+        let args = provider_probe_args(&targets);
+        let script_at = args.iter().position(|a| a == "-c").unwrap() + 1;
+        assert_eq!(args[script_at], PROBE_SCRIPT);
+        assert!(!args[script_at].contains("pwned"));
+        assert_eq!(
+            &args[script_at + 1..],
+            [
+                "sh",
+                "ollama",
+                "http://h:11434/v1",
+                "evil",
+                "http://x/$(touch /tmp/pwned)"
+            ]
+        );
+        assert!(args.iter().any(|a| a == EGRESS_NETWORK));
+        assert!(!args.iter().any(|a| a == NETWORK));
+    }
+
+    #[test]
+    fn parse_probe_output_maps_names_to_status_codes() {
+        let parsed = parse_probe_output("ollama 200\nnim 401\nbroken 000\n\ngarbage\n");
+        assert_eq!(parsed.get("ollama"), Some(&200));
+        assert_eq!(parsed.get("nim"), Some(&401));
+        assert_eq!(parsed.get("broken"), Some(&0));
+        assert_eq!(parsed.len(), 3);
     }
 }
