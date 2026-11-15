@@ -1,0 +1,17 @@
+{
+  "name": "coder",
+  "version": "0.4.0",
+  "description": "Claude Code plugin: run coding tasks in sandboxed autonomous agents through the coder CLI, without exposing provider API keys",
+  "author": {
+    "name": "DevBytAmir"
+  },
+  "homepage": "https://github.com/DevBytAmir/coder",
+  "repository": "https://github.com/DevBytAmir/coder",
+  "license": "Apache-2.0",
+  "keywords": [
+    "sandbox",
+    "podman",
+    "coding-agents",
+    "credential-proxy"
+  ]
+}

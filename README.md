@@ -111,7 +111,7 @@ coder config check                   # validate providers.toml/tools.toml, no li
 coder doctor [--json]                # check podman, images, proxy, secrets file, PATH, provider reachability
 coder completions <shell>            # print a completion script (bash/zsh/fish/...)
 coder init                           # interactive first-run setup wizard
-coder hook pre-tool-use              # hook for coding agents
+coder hook pre-tool-use              # hook for coding agents (see "Agent plugin" below)
 ```
 
 `coder build` uses paths relative to the repository root by default
@@ -178,6 +178,74 @@ Exit codes:
 
 Keep provider-key setup (`coder init`, editing the secrets file) with
 a human: an orchestrating agent never needs to see real keys.
+
+### Agent plugin
+
+The `coder` plugin teaches a coding agent on the host to delegate tasks
+through `coder` as described above. It works in Claude Code and Codex,
+and adds:
+
+- the `run-in-sandbox` skill: preflight with `coder doctor --json`, the
+  right one-shot flags for each tool, what each exit code means, and
+  reviewing the result with git
+- a `PreToolUse` hook that keeps real provider keys out of the agent's
+  context (below)
+
+Install it in **Claude Code**:
+
+```
+/plugin marketplace add DevBytAmir/coder
+/plugin install coder@coder
+```
+
+From a shell: `claude plugin marketplace add DevBytAmir/coder`, then
+`claude plugin install coder@coder`.
+
+Install it in **Codex**:
+
+```sh
+codex plugin marketplace add DevBytAmir/coder
+codex plugin add coder@coder
+```
+
+Write `coder@coder` in full: Codex's built-in marketplace has an
+unrelated plugin also named `coder`. Codex doesn't run a plugin's hooks
+until you approve them, and asks you to review them the next time you
+start it interactively.
+
+#### Permissions in Claude Code
+
+Claude Code asks once before it uses the skill, because the skill
+grants tool permissions. After you approve, its `allowed-tools` lets
+the session run `coder doctor`, `coder run`, and `podman ps` without
+further prompts. Combined with `--yes`, that means the session can
+sandbox any directory the guard doesn't refuse without asking you.
+
+- To skip the skill prompt too, for example in headless `claude -p`
+  runs, add `Skill(coder:run-in-sandbox)` to `permissions.allow` in
+  your Claude Code settings.
+- To approve every run yourself instead, add `Bash(coder run *)` to
+  `permissions.ask`. Ask and deny rules override `allowed-tools`.
+
+#### The hook
+
+The plugin's hook runs `coder hook pre-tool-use` before file, search,
+shell, and `apply_patch` calls, and denies:
+
+- reading, editing, or searching `~/.config/coder/secrets.env` or the
+  rest of the coder config directory, apart from `providers.toml`,
+  `tools.toml`, and `models/`
+- `coder init`
+- `podman exec`, `inspect`, or `cp` on `coder-proxy`, and reading
+  `/proc/<pid>/environ`, which would print the proxy's environment
+
+The agent sees the reason and is told to ask you instead. `coder` must
+be on `PATH`. If it isn't, or the installed `coder` is too old to have
+that command, the hook lets every call through rather than blocking your
+session. It is a guardrail against accidents, not a security boundary:
+it matches known paths and commands, and it protects only the default
+secrets file, not one passed with `--secrets-file`. See the trust
+boundary in [SECURITY.md](SECURITY.md).
 
 ## Setup
 

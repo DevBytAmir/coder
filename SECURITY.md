@@ -37,7 +37,12 @@ file and invoke podman directly, so `coder`'s guarantees protect real
 keys from the agent inside the tool container, not from whatever runs
 `coder` itself. `coder run --yes` skips only the interactive
 confirmation; the refusal of dangerous directories (`$HOME`, `/`,
-`/etc`, and similar) still applies.
+`/etc`, and similar) still applies. The `coder` plugin's `PreToolUse`
+hook, which denies tool calls that would read the secrets file or the
+proxy's environment, is a guardrail against accidental exposure of keys
+to an orchestrating agent, not part of this boundary. It matches known
+paths and commands, so it can be worked around, and it protects only
+the default secrets file, not one passed with `--secrets-file`.
 
 ## Supported versions
 

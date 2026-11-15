@@ -33,6 +33,11 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `coder init`, or print the proxy's environment (`podman exec`,
   `inspect`, or `cp` on `coder-proxy`, or reading `/proc/<pid>/environ`).
   Input it can't parse is let through.
+- A `coder` plugin for Claude Code and Codex, with a marketplace for
+  each (`.claude-plugin/` and `.agents/plugins/`). It adds the
+  `run-in-sandbox` skill, which teaches the agent to hand tasks to
+  `coder run`, and the hook above, which keeps provider keys out of the
+  agent's context.
 
 ### Changed
 

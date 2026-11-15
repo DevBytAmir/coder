@@ -1,0 +1,14 @@
+{
+  "name": "coder",
+  "description": "Claude Code plugins for the coder sandbox launcher",
+  "owner": {
+    "name": "DevBytAmir"
+  },
+  "plugins": [
+    {
+      "name": "coder",
+      "source": "./plugins/coder",
+      "description": "Run coding tasks in sandboxed autonomous agents through the coder CLI, without exposing provider API keys"
+    }
+  ]
+}

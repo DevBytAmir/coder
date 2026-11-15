@@ -1,0 +1,25 @@
+{
+  "name": "coder",
+  "version": "0.4.0",
+  "description": "Codex plugin: run coding tasks in sandboxed autonomous agents through the coder CLI, without exposing provider API keys",
+  "author": {
+    "name": "DevBytAmir"
+  },
+  "homepage": "https://github.com/DevBytAmir/coder",
+  "repository": "https://github.com/DevBytAmir/coder",
+  "license": "Apache-2.0",
+  "keywords": [
+    "sandbox",
+    "podman",
+    "coding-agents",
+    "credential-proxy"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "coder",
+    "shortDescription": "Run coding tasks in a sandbox without exposing API keys",
+    "developerName": "DevBytAmir",
+    "category": "Developer Tools"
+  }
+}

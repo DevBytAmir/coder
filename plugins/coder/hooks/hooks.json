@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Bash|PowerShell|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "coder hook pre-tool-use; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
