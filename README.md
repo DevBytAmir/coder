@@ -150,6 +150,8 @@ coder run claude --provider anthropic -C /abs/path/to/project --yes \
   one-shot run has no one to ask; its deny rules still apply. Redirect
   stdin from `/dev/null` so a tool that reads piped input can't block
   on it.
+- SIGINT, SIGTERM, or SIGHUP to `coder` revokes the session token and
+  stops the container.
 - Each run's container is named `coder-run-<tool>-<id>` and labelled
   `coder.run`: `podman ps --filter label=coder.run` lists active runs.
 
@@ -163,7 +165,7 @@ Exit codes:
 | 64 | confirmation required: no terminal, and `--yes` not given |
 | 77 | sandbox guard refused the directory, or the prompt was declined |
 | 125 | podman could not create or start the container (e.g. the image is missing) |
-| 130 | interrupted (Ctrl-C) |
+| 130 | interrupted (SIGINT, SIGTERM, or SIGHUP) |
 
 Keep provider-key setup (`coder init`, editing the secrets file) with
 a human: an orchestrating agent never needs to see real keys.

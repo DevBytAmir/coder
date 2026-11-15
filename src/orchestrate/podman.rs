@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Output, Stdio};
+use std::time::Duration;
 
 use crate::config::providers::{ProviderConfig, WireFormat};
 use crate::config::tools::ToolConfig;
@@ -249,6 +250,9 @@ fn tool_env_names(format: WireFormat) -> (&'static [&'static str], &'static str)
 /// Label on every tool container, for `podman ps --filter label=coder.run`.
 pub const RUN_LABEL: &str = "coder.run";
 
+/// Grace period `podman stop` gives an interrupted tool container.
+pub const STOP_GRACE: Duration = Duration::from_secs(10);
+
 /// One `coder run` tool container, with a unique name so parallel runs don't collide.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunContainer {
@@ -273,6 +277,18 @@ impl RunContainer {
             name: format!("coder-run-{tool}-{run_id}"),
         }
     }
+}
+
+/// Build args to stop a container, giving it `grace` to exit before it is killed.
+#[must_use]
+pub fn stop_container_args(name: &str, grace: Duration) -> Vec<String> {
+    vec![
+        "stop".to_string(),
+        "--ignore".to_string(),
+        "--time".to_string(),
+        grace.as_secs().to_string(),
+        name.to_string(),
+    ]
 }
 
 /// Build args to run a tool container against the shared network and proxy.
@@ -749,6 +765,14 @@ mod tests {
         assert_eq!(
             RunContainer::new("my tool/x", "ab12").name,
             "coder-run-my-tool-x-ab12"
+        );
+    }
+
+    #[test]
+    fn stop_tolerates_a_missing_container() {
+        assert_eq!(
+            stop_container_args("c1", Duration::from_secs(10)),
+            vec!["stop", "--ignore", "--time", "10", "c1"]
         );
     }
 }

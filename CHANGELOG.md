@@ -29,6 +29,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   when stdout is piped.
 - Tool containers are named `coder-run-<tool>-<id>` instead of getting
   a random podman name, so parallel runs can each be addressed.
+- SIGINT during `coder run` now also stops the tool container, not
+  just revokes its session token.
 
 ### Fixed
 
@@ -50,6 +52,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   podman error.
 - Piping output into a command that exits early (`coder models list x |
   head`) no longer panics with "Broken pipe".
+- SIGTERM and SIGHUP during `coder run` now revoke the session token and
+  stop the tool container. Before, only SIGINT was handled, so a
+  `coder run` killed by its caller left the container running and its
+  token valid until the proxy's idle timeout.
 
 ## [0.4.0] - 2026-11-02
 

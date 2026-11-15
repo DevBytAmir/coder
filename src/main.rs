@@ -18,8 +18,8 @@ use coder::orchestrate::podman::{
     build_proxy_image_args, build_sandbox_image_args, exec_podman, network_create_args,
     network_exists_args, network_is_internal_args, network_rm_args, proxy_admin_args,
     proxy_admin_revoke_args, proxy_down_args, proxy_exists_args, proxy_status_args, proxy_up_args,
-    proxy_up_env, run_podman_attached, run_tool_args, validate_bind_source, RunContainer,
-    EGRESS_NETWORK, NETWORK, REVOKE_TOKEN_ENV,
+    proxy_up_env, run_podman_attached, run_tool_args, stop_container_args, validate_bind_source,
+    RunContainer, EGRESS_NETWORK, NETWORK, REVOKE_TOKEN_ENV, STOP_GRACE,
 };
 use coder::orchestrate::project_root::{existing_file_arg, resolve_project_dir};
 use coder::orchestrate::select::resolve_provider_for_run;
@@ -261,6 +261,19 @@ fn resolve_models(
     (cli_model, session_model)
 }
 
+/// SIGINT/SIGTERM/SIGHUP end the process without unwinding, so `TokenGuard::drop` never
+/// runs: revoke here too, and stop the container so a run killed by its caller doesn't
+/// carry on in the background. Best-effort; the Drop path still covers normal exits.
+fn install_interrupt_handler(token: &str, container_name: &str) {
+    let token = token.to_string();
+    let container_name = container_name.to_string();
+    let _ = ctrlc::set_handler(move || {
+        revoke_token(&token);
+        let _ = exec_podman(&stop_container_args(&container_name, STOP_GRACE), &[]);
+        std::process::exit(exit::INTERRUPTED);
+    });
+}
+
 /// Returns the tool container's exit code.
 fn do_run(args: &RunArgs) -> Result<i32> {
     let providers = load_or_init_providers()?;
@@ -357,17 +370,7 @@ fn do_run(args: &RunArgs) -> Result<i32> {
         token: token.clone(),
     };
 
-    // Ctrl-C (SIGINT) or SIGTERM kill the process directly rather than unwinding the
-    // stack, so TokenGuard::drop above would never run; revoke from the signal handler
-    // too. Best-effort: if installing it fails, the normal Drop path still covers the
-    // far more common clean-exit and panic cases.
-    {
-        let token_for_signal = token.clone();
-        let _ = ctrlc::set_handler(move || {
-            revoke_token(&token_for_signal);
-            std::process::exit(130);
-        });
-    }
+    install_interrupt_handler(&token, &container.name);
 
     let (mut podman_args, podman_env) = run_tool_args(
         tool,
