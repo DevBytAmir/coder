@@ -440,98 +440,180 @@ fn do_config_check() -> Result<()> {
     }
 }
 
-/// Prints which configured providers have a key loaded from the default secrets
-/// file, for `coder doctor`. A missing key isn't flagged as a problem: some
-/// providers (Ollama) legitimately need none.
-fn report_key_status() -> Result<()> {
+#[derive(Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+enum CheckStatus {
+    Ok,
+    /// Not ready, but fine as is (e.g. the proxy isn't running yet).
+    Info,
+    Problem,
+}
+
+#[derive(serde::Serialize)]
+struct Check {
+    name: String,
+    status: CheckStatus,
+    detail: String,
+}
+
+impl Check {
+    fn new(name: impl Into<String>, status: CheckStatus, detail: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            status,
+            detail: detail.into(),
+        }
+    }
+}
+
+/// Which configured providers have a key loaded from the default secrets file, for
+/// `coder doctor`. A missing key isn't a problem: some providers (Ollama) legitimately
+/// need none.
+fn key_status_checks() -> Result<Vec<Check>> {
     let providers = load_or_init_providers()?;
     let real_keys = real_keys_for(&providers, None)?;
     let mut names: Vec<&String> = providers.keys().collect();
     names.sort();
-    for name in names {
-        if real_keys.contains_key(name) {
-            println!("  key for `{name}`: loaded");
-        } else {
-            println!("  key for `{name}`: none (fine if this provider needs none, e.g. ollama)");
-        }
-    }
-    Ok(())
+    Ok(names
+        .into_iter()
+        .map(|name| {
+            let check_name = format!("key for `{name}`");
+            if real_keys.contains_key(name) {
+                Check::new(check_name, CheckStatus::Ok, "loaded")
+            } else {
+                Check::new(
+                    check_name,
+                    CheckStatus::Info,
+                    "none (fine if this provider needs none, e.g. ollama)",
+                )
+            }
+        })
+        .collect())
 }
 
 /// Check the local environment is actually ready to use `coder`: catches the kind of
 /// thing that otherwise only surfaces as a confusing failure deep into `coder run`
 /// (a missing secrets file, a missing image, a `coder` binary not on PATH).
-fn do_doctor() -> Result<()> {
-    let mut problems = Vec::new();
+fn doctor_checks() -> Vec<Check> {
+    use CheckStatus::{Info, Ok, Problem};
+    let mut checks = Vec::new();
 
     match std::process::Command::new("podman")
         .arg("--version")
         .output()
     {
-        Ok(out) if out.status.success() => {
-            println!("podman: {}", String::from_utf8_lossy(&out.stdout).trim());
-        }
-        _ => problems.push("podman: not found on PATH".to_string()),
+        Result::Ok(out) if out.status.success() => checks.push(Check::new(
+            "podman",
+            Ok,
+            String::from_utf8_lossy(&out.stdout).trim(),
+        )),
+        _ => checks.push(Check::new("podman", Problem, "not found on PATH")),
     }
 
     for image in ["coder-sandbox", "coder-proxy"] {
         let out = std::process::Command::new("podman")
             .args(["images", "-q", image])
             .output();
+        let name = format!("image `{image}`");
         match out {
-            Ok(o) if !o.stdout.is_empty() => println!("image `{image}`: built"),
-            _ => problems.push(format!("image `{image}`: not built, run `coder build`")),
+            Result::Ok(o) if !o.stdout.is_empty() => checks.push(Check::new(name, Ok, "built")),
+            _ => checks.push(Check::new(name, Problem, "not built, run `coder build`")),
         }
     }
 
     for dir in ["containers/sandbox", "containers/proxy"] {
         if Path::new(dir).is_dir() {
-            println!("{dir}: found");
+            checks.push(Check::new(dir, Ok, "found"));
         } else {
-            println!(
-                "{dir}: not found here (fine if you're using --fetch/--source-dir \
-                 with `coder build`, otherwise run from a coder checkout)"
-            );
+            checks.push(Check::new(
+                dir,
+                Info,
+                "not found here (fine if you're using --fetch/--source-dir with `coder \
+                 build`, otherwise run from a coder checkout)",
+            ));
         }
     }
 
+    proxy_checks(&mut checks);
+    secrets_checks(&mut checks);
+    binary_check(&mut checks);
+    checks
+}
+
+fn proxy_checks(checks: &mut Vec<Check>) {
+    use CheckStatus::{Info, Ok, Problem};
     if proxy_is_running() {
-        println!("proxy: running");
+        checks.push(Check::new("proxy", Ok, "running"));
         let ports = std::process::Command::new("podman")
             .args(["port", "coder-proxy"])
             .output();
-        match ports {
-            Ok(o) if o.stdout.is_empty() => println!(
-                "proxy admin API: not published to the host (expected, reached via \
-                 `podman exec` only)"
+        checks.push(match ports {
+            Result::Ok(o) if o.stdout.is_empty() => Check::new(
+                "proxy admin API",
+                Ok,
+                "not published to the host (expected, reached via `podman exec` only)",
             ),
-            Ok(o) => problems.push(format!(
-                "proxy: unexpectedly has a published port: {}",
-                String::from_utf8_lossy(&o.stdout).trim()
-            )),
-            Err(e) => problems.push(format!("proxy: could not check published ports: {e}")),
-        }
+            Result::Ok(o) => Check::new(
+                "proxy",
+                Problem,
+                format!(
+                    "unexpectedly has a published port: {}",
+                    String::from_utf8_lossy(&o.stdout).trim()
+                ),
+            ),
+            Err(e) => Check::new(
+                "proxy",
+                Problem,
+                format!("could not check published ports: {e}"),
+            ),
+        });
     } else {
-        println!("proxy: not running (run `coder proxy up` when you need it)");
+        checks.push(Check::new(
+            "proxy",
+            Info,
+            "not running (run `coder proxy up` when you need it)",
+        ));
     }
+}
 
+fn secrets_checks(checks: &mut Vec<Check>) {
+    use CheckStatus::{Info, Ok, Problem};
     match default_secrets_path() {
-        Ok(path) if path.exists() => {
-            println!("secrets file: found at {}", path.display());
-            if let Err(e) = report_key_status() {
-                problems.push(format!("secrets file: could not read keys: {e}"));
+        Result::Ok(path) if path.exists() => {
+            checks.push(Check::new(
+                "secrets file",
+                Ok,
+                format!("found at {}", path.display()),
+            ));
+            match key_status_checks() {
+                Result::Ok(keys) => checks.extend(keys),
+                Err(e) => checks.push(Check::new(
+                    "secrets file",
+                    Problem,
+                    format!("could not read keys: {e}"),
+                )),
             }
         }
-        Ok(path) => println!(
-            "secrets file: none at {} (pass --secrets-file, or create it, before `coder \
-             proxy up`)",
-            path.display()
-        ),
-        Err(e) => problems.push(format!("secrets file: could not resolve default path: {e}")),
+        Result::Ok(path) => checks.push(Check::new(
+            "secrets file",
+            Info,
+            format!(
+                "none at {} (pass --secrets-file, or create it, before `coder proxy up`)",
+                path.display()
+            ),
+        )),
+        Err(e) => checks.push(Check::new(
+            "secrets file",
+            Problem,
+            format!("could not resolve default path: {e}"),
+        )),
     }
+}
 
+fn binary_check(checks: &mut Vec<Check>) {
+    use CheckStatus::{Ok, Problem};
     match std::env::current_exe() {
-        Ok(exe) => {
+        Result::Ok(exe) => {
             let on_path = std::env::var("PATH")
                 .ok()
                 .and_then(|path| {
@@ -540,28 +622,64 @@ fn do_doctor() -> Result<()> {
                         .find(|candidate| candidate.exists())
                 })
                 .is_some();
-            if on_path {
-                println!("coder binary: on PATH ({})", exe.display());
+            checks.push(if on_path {
+                Check::new("coder binary", Ok, format!("on PATH ({})", exe.display()))
             } else {
-                problems.push(format!(
-                    "coder binary: not found on PATH (currently running from {})",
-                    exe.display()
-                ));
+                Check::new(
+                    "coder binary",
+                    Problem,
+                    format!(
+                        "not found on PATH (currently running from {})",
+                        exe.display()
+                    ),
+                )
+            });
+        }
+        Err(e) => checks.push(Check::new(
+            "coder binary",
+            Problem,
+            format!("could not determine location: {e}"),
+        )),
+    }
+}
+
+/// Fails if any check is a problem, after printing them all (text or `--json`).
+fn do_doctor(json: bool) -> Result<()> {
+    let checks = doctor_checks();
+    let problems = checks
+        .iter()
+        .filter(|c| c.status == CheckStatus::Problem)
+        .count();
+
+    if json {
+        #[derive(serde::Serialize)]
+        struct Report<'a> {
+            ok: bool,
+            checks: &'a [Check],
+        }
+        let report = Report {
+            ok: problems == 0,
+            checks: &checks,
+        };
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        for check in checks.iter().filter(|c| c.status != CheckStatus::Problem) {
+            println!("{}: {}", check.name, check.detail);
+        }
+        if problems == 0 {
+            println!("all checks passed");
+        } else {
+            eprintln!();
+            for check in checks.iter().filter(|c| c.status == CheckStatus::Problem) {
+                eprintln!("problem: {}: {}", check.name, check.detail);
             }
         }
-        Err(e) => problems.push(format!("coder binary: could not determine location: {e}")),
     }
 
-    if problems.is_empty() {
-        println!("all checks passed");
-        Ok(())
-    } else {
-        eprintln!();
-        for p in &problems {
-            eprintln!("problem: {p}");
-        }
-        bail!("{} problem(s) found", problems.len());
+    if problems > 0 {
+        bail!("{problems} problem(s) found");
     }
+    Ok(())
 }
 
 fn prompt_line(label: &str) -> Result<String> {
@@ -839,7 +957,7 @@ fn run_cli() -> Result<()> {
         Command::Config { action } => match action {
             ConfigAction::Check => do_config_check(),
         },
-        Command::Doctor => do_doctor(),
+        Command::Doctor { json } => do_doctor(json),
         Command::Completions { shell } => {
             clap_complete::generate(
                 shell,

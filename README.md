@@ -108,7 +108,7 @@ coder run <tool> [-C dir] [--provider X] [--model Y] [--yes] [--timeout D] [--dr
 coder models refresh <provider>|--all [--secrets-file P]  # fetch + filter a provider's models
 coder models list <provider>         # print a provider's refreshed model ids
 coder config check                   # validate providers.toml/tools.toml, no live key needed
-coder doctor                         # check podman, images, proxy, secrets file, PATH are all ready
+coder doctor [--json]                # check podman, images, proxy, secrets file, PATH are all ready
 coder completions <shell>            # print a completion script (bash/zsh/fish/...)
 coder init                           # interactive first-run setup wizard
 ```
@@ -134,6 +134,7 @@ the proxy.
 directory. To drive it from a script, CI job, or another agent:
 
 ```sh
+coder doctor --json                       # preflight: {"ok": bool, "checks": [...]}
 coder run claude --provider anthropic -C /abs/path/to/project --yes --timeout 30m \
   -- -p "make the failing tests pass" </dev/null
 ```

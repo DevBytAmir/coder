@@ -45,7 +45,11 @@ pub enum Command {
         action: ConfigAction,
     },
     /// Check the local environment is ready (podman, images, proxy, PATH)
-    Doctor,
+    Doctor {
+        /// Print the results as JSON on stdout instead of text
+        #[arg(long)]
+        json: bool,
+    },
     /// Print a shell completion script
     Completions { shell: clap_complete::Shell },
     /// Interactive first-run setup wizard

@@ -22,6 +22,7 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the container is killed even if `coder` itself dies.
 - Optional per-tool `memory` and `cpus` limits in `tools.toml`, passed
   to podman as `--memory`/`--cpus` and validated when the file loads.
+- `coder doctor --json`: machine-readable results on stdout.
 
 ### Changed
 
