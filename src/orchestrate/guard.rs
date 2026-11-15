@@ -1,6 +1,7 @@
 use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
 
+use crate::exit::{self, ExitError};
 use crate::orchestrate::project_root::find_git_root;
 
 /// Directories that are never safe to sandbox. The sentinel `"home"` means the caller's
@@ -53,25 +54,60 @@ fn is_refused(canon_project: &Path, home: &Path) -> bool {
     })
 }
 
-/// Refuse to sandbox dangerous directories; otherwise prompt for confirmation.
-/// Returns `Ok(false)` on refusal or decline, `Ok(true)` on explicit confirmation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Confirmation {
+    Prompt,
+    /// `--yes`: proceed without asking. Never overrides a refusal.
+    AssumeYes,
+}
+
+/// Refuse to sandbox dangerous directories; otherwise confirm, either by prompting or,
+/// with [`Confirmation::AssumeYes`], without asking. Returns `Ok(false)` on refusal or
+/// decline, `Ok(true)` on confirmation.
+///
+/// `interactive` is whether stdin is a terminal; without one a prompt would read EOF and
+/// look like a decline, so that is an explicit error instead. The prompt goes to stderr
+/// so it stays visible when stdout is piped.
 ///
 /// # Errors
 ///
-/// Returns an error if reading the confirmation prompt from stdin fails.
-pub fn guard_confirm(project_dir: &Path, home: &Path) -> anyhow::Result<bool> {
+/// Returns an [`ExitError`] with [`exit::CONFIRMATION_REQUIRED`] when a prompt is needed
+/// but `interactive` is false, or an I/O error if reading the prompt from stdin fails.
+pub fn guard_confirm(
+    project_dir: &Path,
+    home: &Path,
+    confirmation: Confirmation,
+    interactive: bool,
+) -> anyhow::Result<bool> {
     let canon_project = resolve_lexical(project_dir);
 
     if is_refused(&canon_project, home) {
         return Ok(false);
     }
 
-    println!("Project folder: {}", canon_project.display());
-    if let Some(root) = find_git_root(&canon_project) {
-        println!("Git repo root: {}", root.display());
+    if confirmation == Confirmation::AssumeYes {
+        eprintln!("sandboxing {} (--yes)", canon_project.display());
+        return Ok(true);
     }
-    print!("Proceed? [y/N] ");
-    io::stdout().flush()?;
+
+    if !interactive {
+        return Err(ExitError::new(
+            exit::CONFIRMATION_REQUIRED,
+            format!(
+                "confirmation required to sandbox {}, but stdin is not a terminal; \
+                 re-run with `--yes -C <dir>` to proceed without prompting",
+                canon_project.display()
+            ),
+        )
+        .into());
+    }
+
+    eprintln!("Project folder: {}", canon_project.display());
+    if let Some(root) = find_git_root(&canon_project) {
+        eprintln!("Git repo root: {}", root.display());
+    }
+    eprint!("Proceed? [y/N] ");
+    io::stderr().flush()?;
 
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
@@ -87,18 +123,27 @@ mod tests {
     #[test]
     fn guard_refuses_home_directory() {
         let home = Path::new("/home/user");
-        assert!(guard_confirm(home, home).is_ok_and(|ok| !ok));
+        assert!(guard_confirm(home, home, Confirmation::Prompt, true).is_ok_and(|ok| !ok));
     }
 
     #[test]
     fn guard_refuses_root() {
-        assert!(guard_confirm(Path::new("/"), Path::new("/home/user")).is_ok_and(|ok| !ok));
+        assert!(guard_confirm(
+            Path::new("/"),
+            Path::new("/home/user"),
+            Confirmation::Prompt,
+            true
+        )
+        .is_ok_and(|ok| !ok));
     }
 
     #[test]
     fn guard_refuses_nonexistent_path_that_lexically_resolves_to_refused_dir() {
         let path = Path::new("/home/user/../../etc/nonexistent-marker-dir/../");
-        assert!(guard_confirm(path, Path::new("/home/user")).is_ok_and(|ok| !ok));
+        assert!(
+            guard_confirm(path, Path::new("/home/user"), Confirmation::Prompt, true)
+                .is_ok_and(|ok| !ok)
+        );
     }
 
     #[test]
@@ -113,6 +158,54 @@ mod tests {
     #[test]
     fn guard_refuses_a_subdirectory_of_a_refused_system_path() {
         let path = Path::new("/etc/ssh");
-        assert!(guard_confirm(path, Path::new("/home/user")).is_ok_and(|ok| !ok));
+        assert!(
+            guard_confirm(path, Path::new("/home/user"), Confirmation::Prompt, true)
+                .is_ok_and(|ok| !ok)
+        );
+    }
+
+    #[test]
+    fn assume_yes_never_overrides_a_refusal() {
+        let home = Path::new("/home/user");
+        for dir in [home, Path::new("/"), Path::new("/etc/ssh")] {
+            assert!(
+                guard_confirm(dir, home, Confirmation::AssumeYes, false).is_ok_and(|ok| !ok),
+                "--yes must not sandbox {}",
+                dir.display()
+            );
+        }
+    }
+
+    /// A project directory the guard accepts. Not the system temp dir: on macOS that
+    /// lives under `/var`, which the guard refuses.
+    fn ordinary_project() -> tempfile::TempDir {
+        tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap()
+    }
+
+    #[test]
+    fn assume_yes_confirms_an_ordinary_project_without_a_terminal() {
+        let project = ordinary_project();
+        let ok = guard_confirm(
+            project.path(),
+            Path::new("/home/user"),
+            Confirmation::AssumeYes,
+            false,
+        )
+        .unwrap();
+        assert!(ok);
+    }
+
+    #[test]
+    fn prompting_without_a_terminal_is_an_explicit_error_not_a_decline() {
+        let project = ordinary_project();
+        let err = guard_confirm(
+            project.path(),
+            Path::new("/home/user"),
+            Confirmation::Prompt,
+            false,
+        )
+        .unwrap_err();
+        assert_eq!(exit::code_for(&err), exit::CONFIRMATION_REQUIRED);
+        assert!(err.to_string().contains("--yes"), "{err}");
     }
 }

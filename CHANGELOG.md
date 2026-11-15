@@ -8,6 +8,23 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - `coder --version` / `-V`.
+- `coder run --yes` / `-y`: sandbox the project directory without the
+  confirmation prompt, for scripts and agents. Requires an explicit
+  `-C`, and never overrides the refusal of `$HOME`, `/`, and other
+  dangerous directories.
+- A "Scripts and agents" section in the README, with the exit codes
+  `coder` uses.
+
+### Changed
+
+- `coder run` without a terminal on stdin and without `--yes` now fails
+  with exit code 64 instead of reading the prompt answer from stdin.
+  Piping an answer in (`echo y | coder run ...`) no longer works; use
+  `--yes -C <dir>`.
+- A refused or declined sandbox-guard check now exits with status 77
+  instead of 1.
+- The sandbox-guard prompt is written to stderr, so it stays visible
+  when stdout is piped.
 
 ### Fixed
 

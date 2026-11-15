@@ -114,6 +114,11 @@ pub struct RunArgs {
     /// Working directory
     #[arg(short = 'C')]
     pub dir: Option<PathBuf>,
+    /// Sandbox the project directory without the confirmation prompt (for scripts and
+    /// agents). Requires an explicit -C. Never overrides the refusal of `$HOME`, `/`,
+    /// and other dangerous directories.
+    #[arg(short = 'y', long, requires = "dir")]
+    pub yes: bool,
     /// Provider to use
     #[arg(long)]
     pub provider: Option<String>,
@@ -126,4 +131,16 @@ pub struct RunArgs {
     pub dry_run: bool,
     /// Arguments passed through to the tool
     pub extra_args: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn yes_requires_an_explicit_dir() {
+        assert!(Cli::try_parse_from(["coder", "run", "claude", "--yes"]).is_err());
+        assert!(Cli::try_parse_from(["coder", "run", "claude", "-y", "-C", "/p"]).is_ok());
+    }
 }

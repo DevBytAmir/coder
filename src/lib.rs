@@ -4,6 +4,7 @@
 
 pub mod cli;
 pub mod config;
+pub mod exit;
 pub mod orchestrate;
 pub mod proxy;
 pub mod secrets;

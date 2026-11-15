@@ -30,6 +30,15 @@ does not add its own filesystem sandboxing on top. Scope mounted paths
 to what the tool actually needs: `coder` will not stop an agent from
 reading or modifying anything you mount into its container.
 
+**Trust boundary:** the host-side caller of the `coder` CLI is trusted,
+whether a person or an automated orchestrator (a script, CI job, or
+another AI agent running on the host). That caller can read the secrets
+file and invoke podman directly, so `coder`'s guarantees protect real
+keys from the agent inside the tool container, not from whatever runs
+`coder` itself. `coder run --yes` skips only the interactive
+confirmation; the refusal of dangerous directories (`$HOME`, `/`,
+`/etc`, and similar) still applies.
+
 ## Supported versions
 
 Only the latest release on the default branch is supported with

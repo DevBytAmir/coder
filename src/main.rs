@@ -12,7 +12,8 @@ use coder::cli::{Cli, Command, ConfigAction, ModelsAction, ProxyAction, RunArgs}
 use coder::config::defaults::{write_default_providers_if_missing, write_default_tools_if_missing};
 use coder::config::providers::{load_providers, ProviderConfig};
 use coder::config::tools::{load_tools, ToolConfig};
-use coder::orchestrate::guard::guard_confirm;
+use coder::exit::{self, ExitError};
+use coder::orchestrate::guard::{guard_confirm, Confirmation};
 use coder::orchestrate::podman::{
     build_proxy_image_args, build_sandbox_image_args, exec_podman, network_create_args,
     network_exists_args, network_is_internal_args, network_rm_args, proxy_admin_args,
@@ -309,8 +310,22 @@ fn do_run(args: &RunArgs) -> Result<i32> {
     }
 
     let home = home_dir()?;
-    if !guard_confirm(&project_dir, &home)? {
-        bail!("aborted: not sandboxing {}", project_dir.display());
+    let confirmation = if args.yes {
+        Confirmation::AssumeYes
+    } else {
+        Confirmation::Prompt
+    };
+    if !guard_confirm(
+        &project_dir,
+        &home,
+        confirmation,
+        std::io::stdin().is_terminal(),
+    )? {
+        return Err(ExitError::new(
+            exit::NOT_PERMITTED,
+            format!("aborted: not sandboxing {}", project_dir.display()),
+        )
+        .into());
     }
 
     let extra_args = combine_extra_args(rewritten, &args.extra_args);
@@ -735,6 +750,13 @@ fn do_build(fetch: bool, keep: Option<&Path>, source_dir: Option<&Path>) -> Resu
     check_status(run_podman_attached(&build_proxy_image_args(), &[])?)
 }
 
+fn main() {
+    if let Err(err) = run_cli() {
+        eprintln!("Error: {err:?}");
+        std::process::exit(exit::code_for(&err));
+    }
+}
+
 /// Rust ignores SIGPIPE, so printing to a closed pipe (`coder models list x | head`)
 /// panics instead of exiting quietly like other CLIs. Restore the default for every
 /// command except the proxy server, where a client hanging up mid-response must not kill
@@ -752,7 +774,7 @@ fn restore_default_sigpipe(command: &Command) {
     let _ = command;
 }
 
-fn main() -> Result<()> {
+fn run_cli() -> Result<()> {
     let cli = Cli::parse();
     restore_default_sigpipe(&cli.command);
     match cli.command {

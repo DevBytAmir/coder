@@ -89,6 +89,12 @@ or run a tool with more filesystem access than it needs, `coder`
 won't stop the agent from reading or modifying that data. Scope what
 you mount accordingly.
 
+**Who is trusted:** whoever runs the `coder` CLI on the host, whether
+that's you or a script or agent (such as a Claude Code session) driving
+it. The host side can read the secrets file and run podman directly, so
+`coder` protects keys from the agent *inside* the sandbox, not from its
+caller. See [Scripts and agents](#scripts-and-agents).
+
 See [SECURITY.md](SECURITY.md) for the formal statement.
 
 ## Usage
@@ -98,7 +104,7 @@ coder build                          # build/rebuild coder-sandbox and coder-pro
 coder proxy up [--secrets-file P]    # start the proxy container (defaults to ~/.config/coder/secrets.env)
 coder proxy down                     # stop it
 coder proxy status                   # is it running, which providers have keys loaded
-coder run <tool> [-C dir] [--provider X] [--model Y] [--dry-run] [-- <tool-args...>]
+coder run <tool> [-C dir] [--provider X] [--model Y] [--yes] [--dry-run] [-- <tool-args...>]
 coder models refresh <provider>|--all [--secrets-file P]  # fetch + filter a provider's models
 coder models list <provider>         # print a provider's refreshed model ids
 coder config check                   # validate providers.toml/tools.toml, no live key needed
@@ -121,6 +127,44 @@ a sandbox-guard confirmation before touching podman (refuses `$HOME`,
 `/`, etc.), auto-starts the proxy if it isn't already running, mints
 a session token, and launches the requested tool container against
 the proxy.
+
+## Scripts and agents
+
+`coder run` normally asks `Proceed? [y/N]` before sandboxing a
+directory. To drive it from a script, CI job, or another agent:
+
+```sh
+coder run claude --provider anthropic -C /abs/path/to/project --yes \
+  -- -p "make the failing tests pass" </dev/null
+```
+
+- `--yes` / `-y` skips the prompt. It requires an explicit `-C`, and it
+  never overrides the refusal of `$HOME`, `/`, and other dangerous
+  directories.
+- Without a terminal on stdin and without `--yes`, `coder run` fails
+  with exit code 64 instead of prompting.
+- Arguments after `--` go to the tool unchanged, so use the tool's own
+  one-shot mode: `claude -p "..."`, `aider --message "..."
+  --no-auto-commits`, `opencode run --auto "..."`. opencode needs
+  `--auto` because the sandbox config makes edits ask first, and a
+  one-shot run has no one to ask; its deny rules still apply. Redirect
+  stdin from `/dev/null` so a tool that reads piped input can't block
+  on it.
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| tool's own | `coder run` passes the tool's exit code through |
+| 1 | any other `coder` error |
+| 2 | invalid command-line arguments |
+| 64 | confirmation required: no terminal, and `--yes` not given |
+| 77 | sandbox guard refused the directory, or the prompt was declined |
+| 125 | podman could not create or start the container (e.g. the image is missing) |
+| 130 | interrupted (Ctrl-C) |
+
+Keep provider-key setup (`coder init`, editing the secrets file) with
+a human: an orchestrating agent never needs to see real keys.
 
 ## Setup
 
