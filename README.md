@@ -104,7 +104,7 @@ coder build                          # build/rebuild coder-sandbox and coder-pro
 coder proxy up [--secrets-file P]    # start the proxy container (defaults to ~/.config/coder/secrets.env)
 coder proxy down                     # stop it
 coder proxy status                   # is it running, which providers have keys loaded
-coder run <tool> [-C dir] [--provider X] [--model Y] [--yes] [--dry-run] [-- <tool-args...>]
+coder run <tool> [-C dir] [--provider X] [--model Y] [--yes] [--timeout D] [--dry-run] [-- <tool-args...>]
 coder models refresh <provider>|--all [--secrets-file P]  # fetch + filter a provider's models
 coder models list <provider>         # print a provider's refreshed model ids
 coder config check                   # validate providers.toml/tools.toml, no live key needed
@@ -134,7 +134,7 @@ the proxy.
 directory. To drive it from a script, CI job, or another agent:
 
 ```sh
-coder run claude --provider anthropic -C /abs/path/to/project --yes \
+coder run claude --provider anthropic -C /abs/path/to/project --yes --timeout 30m \
   -- -p "make the failing tests pass" </dev/null
 ```
 
@@ -150,6 +150,10 @@ coder run claude --provider anthropic -C /abs/path/to/project --yes \
   one-shot run has no one to ask; its deny rules still apply. Redirect
   stdin from `/dev/null` so a tool that reads piped input can't block
   on it.
+- `--timeout <D>` (`90`, `90s`, `30m`, `2h`) stops the tool container
+  once it elapses, giving it 10 seconds to exit cleanly. Podman's own
+  `--timeout` is also set 30 seconds later, so the container is killed
+  even if `coder` itself dies first.
 - SIGINT, SIGTERM, or SIGHUP to `coder` revokes the session token and
   stops the container.
 - Each run's container is named `coder-run-<tool>-<id>` and labelled
@@ -159,11 +163,12 @@ Exit codes:
 
 | Code | Meaning |
 |---|---|
-| tool's own | `coder run` passes the tool's exit code through |
+| tool's own | `coder run` passes the tool's exit code through (128 + N if a signal N killed it) |
 | 1 | any other `coder` error |
 | 2 | invalid command-line arguments |
 | 64 | confirmation required: no terminal, and `--yes` not given |
 | 77 | sandbox guard refused the directory, or the prompt was declined |
+| 124 | `--timeout` elapsed; the container was stopped |
 | 125 | podman could not create or start the container (e.g. the image is missing) |
 | 130 | interrupted (SIGINT, SIGTERM, or SIGHUP) |
 

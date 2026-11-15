@@ -18,8 +18,9 @@ use coder::orchestrate::podman::{
     build_proxy_image_args, build_sandbox_image_args, exec_podman, network_create_args,
     network_exists_args, network_is_internal_args, network_rm_args, proxy_admin_args,
     proxy_admin_revoke_args, proxy_down_args, proxy_exists_args, proxy_status_args, proxy_up_args,
-    proxy_up_env, run_podman_attached, run_tool_args, stop_container_args, validate_bind_source,
-    RunContainer, EGRESS_NETWORK, NETWORK, REVOKE_TOKEN_ENV, STOP_GRACE,
+    proxy_up_env, run_podman_attached, run_podman_attached_with_timeout, run_tool_args,
+    stop_container_args, validate_bind_source, RunContainer, RunOutcome, EGRESS_NETWORK, NETWORK,
+    REVOKE_TOKEN_ENV, STOP_GRACE,
 };
 use coder::orchestrate::project_root::{existing_file_arg, resolve_project_dir};
 use coder::orchestrate::select::resolve_provider_for_run;
@@ -261,6 +262,23 @@ fn resolve_models(
     (cli_model, session_model)
 }
 
+/// Ask the proxy for a session token scoped to `provider` (and `model`, if pinned).
+fn mint_session_token(provider: &str, model: Option<&str>) -> Result<String> {
+    let mint_body = serde_json::json!({
+        "provider": provider,
+        "model": model,
+    });
+    let mint_resp: serde_json::Value = serde_json::from_str(
+        &admin_call("POST", "/admin/tokens", Some(&mint_body.to_string()))
+            .context("minting session token from proxy")?,
+    )
+    .context("parsing token response from proxy")?;
+    Ok(mint_resp["token"]
+        .as_str()
+        .context("proxy did not return a token")?
+        .to_string())
+}
+
 /// SIGINT/SIGTERM/SIGHUP end the process without unwinding, so `TokenGuard::drop` never
 /// runs: revoke here too, and stop the container so a run killed by its caller doesn't
 /// carry on in the background. Best-effort; the Drop path still covers normal exits.
@@ -304,7 +322,7 @@ fn do_run(args: &RunArgs) -> Result<i32> {
     validate_bind_source(&project_dir)?;
 
     let run_id = uuid::Uuid::new_v4().simple().to_string();
-    let container = RunContainer::new(&args.tool, &run_id[..12]);
+    let container = RunContainer::new(&args.tool, &run_id[..12], args.timeout);
 
     if args.dry_run {
         let extra_args = combine_extra_args(rewritten, &args.extra_args);
@@ -352,19 +370,7 @@ fn do_run(args: &RunArgs) -> Result<i32> {
         do_proxy_up(None)?;
     }
 
-    let mint_body = serde_json::json!({
-        "provider": provider_name,
-        "model": session_model,
-    });
-    let mint_resp: serde_json::Value = serde_json::from_str(
-        &admin_call("POST", "/admin/tokens", Some(&mint_body.to_string()))
-            .context("minting session token from proxy")?,
-    )
-    .context("parsing token response from proxy")?;
-    let token = mint_resp["token"]
-        .as_str()
-        .context("proxy did not return a token")?
-        .to_string();
+    let token = mint_session_token(&provider_name, session_model.as_deref())?;
 
     let _guard = TokenGuard {
         token: token.clone(),
@@ -383,9 +389,14 @@ fn do_run(args: &RunArgs) -> Result<i32> {
     );
     podman_args.extend(extra_args);
 
-    // interactive session: inherit the terminal rather than capturing output
-    let status = run_podman_attached(&podman_args, &podman_env)?;
-    Ok(status.code().unwrap_or(1))
+    // inherit the terminal rather than capturing output
+    match run_podman_attached_with_timeout(&podman_args, &podman_env, &container)? {
+        RunOutcome::Exited(status) => Ok(exit::from_status(status)),
+        RunOutcome::TimedOut => {
+            eprintln!("coder: timed out, stopped {}", container.name);
+            Ok(exit::TIMED_OUT)
+        }
+    }
 }
 
 /// Parse providers.toml/tools.toml (deserialization itself already rejects an invalid

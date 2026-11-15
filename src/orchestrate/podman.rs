@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Output, Stdio};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::config::providers::{ProviderConfig, WireFormat};
 use crate::config::tools::ToolConfig;
@@ -250,19 +250,27 @@ fn tool_env_names(format: WireFormat) -> (&'static [&'static str], &'static str)
 /// Label on every tool container, for `podman ps --filter label=coder.run`.
 pub const RUN_LABEL: &str = "coder.run";
 
-/// Grace period `podman stop` gives an interrupted tool container.
+/// Grace period `podman stop` gives a timed-out or interrupted tool container.
 pub const STOP_GRACE: Duration = Duration::from_secs(10);
+/// How long the `podman run` client gets to exit after its container is stopped.
+const CLIENT_EXIT_GRACE: Duration = Duration::from_secs(5);
+/// Extra time past `--timeout` before podman's own `--timeout` kills the container.
+/// It only fires if `coder` itself died and never ran its graceful stop.
+const BACKSTOP_MARGIN: Duration = Duration::from_secs(30);
+const TIMEOUT_POLL: Duration = Duration::from_millis(200);
 
-/// One `coder run` tool container, with a unique name so parallel runs don't collide.
+/// One `coder run` tool container: a unique name, so parallel runs don't collide and
+/// `--timeout`/signals stop exactly this container, and an optional hard time limit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunContainer {
     pub name: String,
+    pub timeout: Option<Duration>,
 }
 
 impl RunContainer {
     /// `coder-run-<tool>-<run_id>`, with characters podman rejects in names replaced by `-`.
     #[must_use]
-    pub fn new(tool: &str, run_id: &str) -> Self {
+    pub fn new(tool: &str, run_id: &str, timeout: Option<Duration>) -> Self {
         let tool: String = tool
             .chars()
             .map(|c| {
@@ -275,7 +283,14 @@ impl RunContainer {
             .collect();
         Self {
             name: format!("coder-run-{tool}-{run_id}"),
+            timeout,
         }
+    }
+
+    /// Whole seconds for podman's `--timeout`, enforced by conmon even if `coder` dies.
+    fn backstop_secs(&self) -> Option<u64> {
+        self.timeout
+            .map(|t| t.saturating_add(BACKSTOP_MARGIN).as_secs())
     }
 }
 
@@ -287,6 +302,17 @@ pub fn stop_container_args(name: &str, grace: Duration) -> Vec<String> {
         "--ignore".to_string(),
         "--time".to_string(),
         grace.as_secs().to_string(),
+        name.to_string(),
+    ]
+}
+
+/// Build args to force-remove a container, succeeding if it doesn't exist.
+#[must_use]
+pub fn remove_container_args(name: &str) -> Vec<String> {
+    vec![
+        "rm".to_string(),
+        "--force".to_string(),
+        "--ignore".to_string(),
         name.to_string(),
     ]
 }
@@ -326,6 +352,10 @@ pub fn run_tool_args(
         "-v".to_string(),
         format!("{}:/workspace", project_dir.display()),
     ];
+
+    if let Some(secs) = container.backstop_secs() {
+        args.push(format!("--timeout={secs}"));
+    }
 
     if let Some(data_volume) = &tool.data_volume {
         args.push("-v".to_string());
@@ -394,6 +424,54 @@ pub fn run_podman_attached(
     Ok(status)
 }
 
+#[derive(Debug)]
+pub enum RunOutcome {
+    Exited(ExitStatus),
+    TimedOut,
+}
+
+/// Like [`run_podman_attached`], but once `container.timeout` elapses the container is
+/// stopped (see [`STOP_GRACE`]) and [`RunOutcome::TimedOut`] is returned.
+///
+/// # Errors
+///
+/// Returns an error if `podman` can't be spawned or waited on.
+pub fn run_podman_attached_with_timeout(
+    args: &[String],
+    env: &[(String, String)],
+    container: &RunContainer,
+) -> anyhow::Result<RunOutcome> {
+    let mut child = Command::new("podman")
+        .args(args)
+        .envs(env.iter().map(|(k, v)| (k, v)))
+        .spawn()?;
+    let Some(timeout) = container.timeout else {
+        return Ok(RunOutcome::Exited(child.wait()?));
+    };
+
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if let Some(status) = child.try_wait()? {
+            return Ok(RunOutcome::Exited(status));
+        }
+        std::thread::sleep(TIMEOUT_POLL);
+    }
+
+    let _ = exec_podman(&stop_container_args(&container.name, STOP_GRACE), &[]);
+    let client_deadline = Instant::now() + CLIENT_EXIT_GRACE;
+    while child.try_wait()?.is_none() {
+        if Instant::now() >= client_deadline {
+            // The stop can miss a container podman was still creating at the deadline.
+            let _ = exec_podman(&remove_container_args(&container.name), &[]);
+            let _ = child.kill();
+            let _ = child.wait();
+            break;
+        }
+        std::thread::sleep(TIMEOUT_POLL);
+    }
+    Ok(RunOutcome::TimedOut)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -434,7 +512,7 @@ mod tests {
             &provider,
             None,
             true,
-            &RunContainer::new("test", "id"),
+            &RunContainer::new("test", "id", None),
         );
         assert!(args.iter().any(|a| a == "coder-net"));
         assert!(!args.iter().any(|a| a == "host"));
@@ -451,7 +529,7 @@ mod tests {
             &provider,
             None,
             true,
-            &RunContainer::new("test", "id"),
+            &RunContainer::new("test", "id", None),
         );
         assert!(args.iter().any(|a| a == "--cap-drop=ALL"));
         assert!(args.iter().any(|a| a == "--security-opt=no-new-privileges"));
@@ -470,7 +548,7 @@ mod tests {
             &provider,
             None,
             true,
-            &RunContainer::new("test", "id"),
+            &RunContainer::new("test", "id", None),
         );
         assert!(args
             .iter()
@@ -489,7 +567,7 @@ mod tests {
             &provider,
             None,
             true,
-            &RunContainer::new("test", "id"),
+            &RunContainer::new("test", "id", None),
         );
         assert!(!args.iter().any(|a| a.contains("tok-xyz")));
         assert!(args.iter().any(|a| a == "OPENAI_API_KEY"));
@@ -511,7 +589,7 @@ mod tests {
             &provider,
             None,
             true,
-            &RunContainer::new("test", "id"),
+            &RunContainer::new("test", "id", None),
         );
         assert!(args.iter().any(|a| a == "ANTHROPIC_API_KEY"));
         assert_eq!(
@@ -531,7 +609,7 @@ mod tests {
             &provider,
             Some("m1"),
             true,
-            &RunContainer::new("test", "id"),
+            &RunContainer::new("test", "id", None),
         );
         let tail: Vec<&str> = args
             .iter()
@@ -576,7 +654,7 @@ mod tests {
             &test_provider_config(),
             None,
             true,
-            &RunContainer::new("test", "id"),
+            &RunContainer::new("test", "id", None),
         );
         assert!(tool_args.iter().any(|a| a == NETWORK));
         assert!(!tool_args.iter().any(|a| a == EGRESS_NETWORK));
@@ -656,7 +734,7 @@ mod tests {
             &provider,
             None,
             true,
-            &RunContainer::new("test", "id"),
+            &RunContainer::new("test", "id", None),
         );
         assert!(args
             .iter()
@@ -675,7 +753,7 @@ mod tests {
             &provider,
             None,
             true,
-            &RunContainer::new("test", "id"),
+            &RunContainer::new("test", "id", None),
         );
         assert!(args
             .iter()
@@ -693,7 +771,7 @@ mod tests {
             &provider,
             None,
             false,
-            &RunContainer::new("test", "id"),
+            &RunContainer::new("test", "id", None),
         );
         assert!(args.iter().any(|a| a == "-i"));
         assert!(!args.iter().any(|a| a == "-it"));
@@ -741,7 +819,7 @@ mod tests {
 
     #[test]
     fn run_tool_args_names_and_labels_the_container() {
-        let container = RunContainer::new("claude", "abc123");
+        let container = RunContainer::new("claude", "abc123", None);
         let (args, _) = run_tool_args(
             &test_tool_config(),
             Path::new("/p"),
@@ -754,25 +832,100 @@ mod tests {
         let name_at = args.iter().position(|a| a == "--name").unwrap();
         assert_eq!(args[name_at + 1], "coder-run-claude-abc123");
         assert!(args.iter().any(|a| a == "--label=coder.run=1"));
+        assert!(!args.iter().any(|a| a.starts_with("--timeout")));
+    }
+
+    #[test]
+    fn run_tool_args_sets_a_podman_backstop_past_the_coder_timeout() {
+        let container = RunContainer::new("claude", "id", Some(Duration::from_secs(90)));
+        let (args, _) = run_tool_args(
+            &test_tool_config(),
+            Path::new("/p"),
+            "t",
+            &test_provider_config(),
+            None,
+            false,
+            &container,
+        );
+        assert!(args.iter().any(|a| a == "--timeout=120"), "{args:?}");
     }
 
     #[test]
     fn run_container_name_is_podman_safe() {
         assert_eq!(
-            RunContainer::new("claude", "ab12").name,
+            RunContainer::new("claude", "ab12", None).name,
             "coder-run-claude-ab12"
         );
         assert_eq!(
-            RunContainer::new("my tool/x", "ab12").name,
+            RunContainer::new("my tool/x", "ab12", None).name,
             "coder-run-my-tool-x-ab12"
         );
     }
 
     #[test]
-    fn stop_tolerates_a_missing_container() {
+    fn backstop_saturates_instead_of_overflowing() {
+        let container = RunContainer::new("t", "id", Some(Duration::MAX));
+        assert_eq!(container.backstop_secs(), Some(Duration::MAX.as_secs()));
+    }
+
+    #[test]
+    fn stop_and_remove_tolerate_a_missing_container() {
         assert_eq!(
             stop_container_args("c1", Duration::from_secs(10)),
             vec!["stop", "--ignore", "--time", "10", "c1"]
         );
+        assert_eq!(
+            remove_container_args("c1"),
+            vec!["rm", "--force", "--ignore", "c1"]
+        );
+    }
+
+    #[test]
+    #[ignore = "needs podman and the coder-sandbox image; run with --ignored"]
+    fn timeout_stops_the_named_container() {
+        let run_id = uuid::Uuid::new_v4().simple().to_string();
+        let container =
+            RunContainer::new("timeout-test", &run_id[..12], Some(Duration::from_secs(3)));
+        let args: Vec<String> = [
+            "run",
+            "--rm",
+            "--name",
+            &container.name,
+            "coder-sandbox",
+            "sleep",
+            "120",
+        ]
+        .map(String::from)
+        .to_vec();
+        let started = Instant::now();
+        let outcome = run_podman_attached_with_timeout(&args, &[], &container).unwrap();
+        assert!(matches!(outcome, RunOutcome::TimedOut), "{outcome:?}");
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "took {:?}",
+            started.elapsed()
+        );
+        let still_there = exec_podman(
+            &["container".into(), "exists".into(), container.name.clone()],
+            &[],
+        )
+        .unwrap()
+        .status
+        .success();
+        assert!(!still_there, "container {} should be gone", container.name);
+    }
+
+    #[test]
+    #[ignore = "needs podman and the coder-sandbox image; run with --ignored"]
+    fn without_timeout_the_tool_exit_code_passes_through() {
+        let args: Vec<String> = ["run", "--rm", "coder-sandbox", "sh", "-c", "exit 7"]
+            .map(String::from)
+            .to_vec();
+        let container = RunContainer::new("t", "unused", None);
+        let outcome = run_podman_attached_with_timeout(&args, &[], &container).unwrap();
+        let RunOutcome::Exited(status) = outcome else {
+            panic!("expected exit, got {outcome:?}");
+        };
+        assert_eq!(status.code(), Some(7));
     }
 }

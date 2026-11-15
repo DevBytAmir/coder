@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand};
 
@@ -119,6 +120,10 @@ pub struct RunArgs {
     /// and other dangerous directories.
     #[arg(short = 'y', long, requires = "dir")]
     pub yes: bool,
+    /// Stop the tool container and exit with status 124 if it is still running after
+    /// this long (e.g. 90, 90s, 30m, 2h)
+    #[arg(long, value_name = "DURATION", value_parser = parse_duration)]
+    pub timeout: Option<Duration>,
     /// Provider to use
     #[arg(long)]
     pub provider: Option<String>,
@@ -133,14 +138,91 @@ pub struct RunArgs {
     pub extra_args: Vec<String>,
 }
 
+/// Parse a `--timeout` value: a whole number of seconds, optionally suffixed with `s`,
+/// `m`, or `h`.
+///
+/// # Errors
+///
+/// Returns a message for clap to show if `text` isn't a positive whole number with an
+/// optional unit, or overflows.
+pub fn parse_duration(text: &str) -> Result<Duration, String> {
+    let text = text.trim();
+    let invalid = || format!("invalid duration `{text}`: expected e.g. 90, 90s, 30m or 2h");
+    let (number, unit_secs) = match text.as_bytes().last() {
+        Some(b's') => (&text[..text.len() - 1], 1),
+        Some(b'm') => (&text[..text.len() - 1], 60),
+        Some(b'h') => (&text[..text.len() - 1], 3600),
+        _ => (text, 1),
+    };
+    let count: u64 = number.parse().map_err(|_| invalid())?;
+    if count == 0 {
+        return Err(format!(
+            "invalid duration `{text}`: must be greater than zero"
+        ));
+    }
+    count
+        .checked_mul(unit_secs)
+        .map(Duration::from_secs)
+        .ok_or_else(invalid)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use clap::Parser;
 
     #[test]
+    fn parse_duration_accepts_bare_seconds_and_units() {
+        assert_eq!(parse_duration("90"), Ok(Duration::from_secs(90)));
+        assert_eq!(parse_duration("90s"), Ok(Duration::from_secs(90)));
+        assert_eq!(parse_duration("30m"), Ok(Duration::from_mins(30)));
+        assert_eq!(parse_duration("2h"), Ok(Duration::from_secs(7200)));
+    }
+
+    #[test]
+    fn parse_duration_rejects_zero_negative_garbage_and_overflow() {
+        for bad in [
+            "0",
+            "0m",
+            "-5",
+            "",
+            "s",
+            "5d",
+            "1.5h",
+            "abc",
+            "18446744073709551615h",
+        ] {
+            assert!(parse_duration(bad).is_err(), "should reject `{bad}`");
+        }
+    }
+
+    #[test]
     fn yes_requires_an_explicit_dir() {
         assert!(Cli::try_parse_from(["coder", "run", "claude", "--yes"]).is_err());
         assert!(Cli::try_parse_from(["coder", "run", "claude", "-y", "-C", "/p"]).is_ok());
+    }
+
+    #[test]
+    fn run_flags_parse_before_passthrough_args() {
+        let cli = Cli::try_parse_from([
+            "coder",
+            "run",
+            "claude",
+            "-C",
+            "/p",
+            "--yes",
+            "--timeout",
+            "30m",
+            "--",
+            "-p",
+            "fix the tests",
+        ])
+        .unwrap();
+        let Command::Run(args) = cli.command else {
+            panic!("expected run");
+        };
+        assert!(args.yes);
+        assert_eq!(args.timeout, Some(Duration::from_mins(30)));
+        assert_eq!(args.extra_args, vec!["-p", "fix the tests"]);
     }
 }

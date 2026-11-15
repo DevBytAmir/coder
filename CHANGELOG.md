@@ -16,6 +16,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `coder` uses.
 - Tool containers are labelled `coder.run`, so `podman ps --filter
   label=coder.run` lists active runs.
+- `coder run --timeout <duration>` (`90`, `90s`, `30m`, `2h`): stop the
+  tool container and exit with status 124 once the duration elapses.
+  Podman's own `--timeout` is set 30 seconds later as a backstop, so
+  the container is killed even if `coder` itself dies.
 
 ### Changed
 
@@ -31,6 +35,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a random podman name, so parallel runs can each be addressed.
 - SIGINT during `coder run` now also stops the tool container, not
   just revokes its session token.
+- When a signal kills the tool container's podman process, `coder run`
+  exits with 128 + the signal number instead of 1.
 
 ### Fixed
 
