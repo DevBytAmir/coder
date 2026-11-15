@@ -98,6 +98,8 @@ mod tests {
             extra_env: HashMap::new(),
             wire_format: None,
             model_args: None,
+            memory: None,
+            cpus: None,
         }
     }
 

@@ -158,6 +158,8 @@ coder run claude --provider anthropic -C /abs/path/to/project --yes --timeout 30
   stops the container.
 - Each run's container is named `coder-run-<tool>-<id>` and labelled
   `coder.run`: `podman ps --filter label=coder.run` lists active runs.
+- Optional per-tool resource limits in `tools.toml`, checked by
+  `coder config check`: `memory = "4g"`, `cpus = 2`.
 
 Exit codes:
 

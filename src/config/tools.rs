@@ -14,7 +14,7 @@ pub enum ProjectRoot {
     GitRootOfArg,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ToolConfig {
     pub image: String,
     pub binary: String,
@@ -30,6 +30,14 @@ pub struct ToolConfig {
     /// split on whitespace, empty = pass nothing); inferred for known binaries if omitted.
     #[serde(default)]
     pub model_args: Option<String>,
+    /// Memory limit for the tool container, passed to podman as `--memory` (e.g.
+    /// `"4g"`); unlimited if omitted.
+    #[serde(default)]
+    pub memory: Option<String>,
+    /// CPU limit for the tool container, passed to podman as `--cpus` (e.g. `2` or
+    /// `1.5`); unlimited if omitted.
+    #[serde(default)]
+    pub cpus: Option<f64>,
 }
 
 impl ToolConfig {
@@ -52,6 +60,24 @@ impl ToolConfig {
         }
     }
 
+    /// Reject resource limits podman would refuse, so the error names the tool and field
+    /// instead of surfacing as a podman failure at launch.
+    fn validate_limits(&self) -> Result<()> {
+        if let Some(memory) = &self.memory {
+            if !is_podman_size(memory) {
+                anyhow::bail!(
+                    "invalid memory `{memory}`: expected a positive size like \"512m\" or \"4g\""
+                );
+            }
+        }
+        if let Some(cpus) = self.cpus {
+            if !cpus.is_finite() || cpus <= 0.0 {
+                anyhow::bail!("invalid cpus `{cpus}`: expected a positive number like 2 or 1.5");
+            }
+        }
+        Ok(())
+    }
+
     /// The CLI args that select `model` in this tool.
     #[must_use]
     pub fn model_cli_args(&self, model: &str) -> Vec<String> {
@@ -70,6 +96,28 @@ impl ToolConfig {
             .map(|part| part.replace("{model}", model))
             .collect()
     }
+}
+
+/// Whether podman accepts `text` as a memory size and it is non-zero. Mirrors the
+/// go-units `RAMInBytes` grammar podman uses: `<number>[ ][kmgtp][i][b]`, any case.
+fn is_podman_size(text: &str) -> bool {
+    let number_len = text
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(text.len());
+    let (number, suffix) = text.split_at(number_len);
+    let valid_number = number
+        .split('.')
+        .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()));
+    let suffix = suffix
+        .strip_prefix(' ')
+        .unwrap_or(suffix)
+        .to_ascii_lowercase();
+    let suffix = suffix
+        .strip_prefix(['k', 'm', 'g', 't', 'p'])
+        .unwrap_or(&suffix);
+    let suffix = suffix.strip_prefix('i').unwrap_or(suffix);
+    let suffix = suffix.strip_prefix('b').unwrap_or(suffix);
+    valid_number && suffix.is_empty() && number.bytes().any(|b| (b'1'..=b'9').contains(&b))
 }
 
 #[derive(Deserialize)]
@@ -95,6 +143,8 @@ fn parse_tools_str(text: &str) -> Result<HashMap<String, ToolConfig>> {
         .map(|(name, value)| {
             let cfg = value
                 .try_into::<ToolConfig>()
+                .with_context(|| format!("invalid tool `{name}`"))?;
+            cfg.validate_limits()
                 .with_context(|| format!("invalid tool `{name}`"))?;
             Ok((name, cfg))
         })
@@ -144,6 +194,8 @@ mod tests {
             extra_env: HashMap::new(),
             wire_format: None,
             model_args: None,
+            memory: None,
+            cpus: None,
         }
     }
 
@@ -210,5 +262,75 @@ mod tests {
         "#;
         let err = parse_tools_str(toml).unwrap_err().to_string();
         assert!(err.contains("broken"), "error should name the tool: {err}");
+    }
+
+    #[test]
+    fn parses_resource_limits_with_integer_or_float_cpus() {
+        let toml = r#"
+            [tools.a]
+            image = "img"
+            binary = "aider"
+            project_root = "cwd"
+            memory = "4g"
+            cpus = 2
+
+            [tools.b]
+            image = "img"
+            binary = "aider"
+            project_root = "cwd"
+            cpus = 1.5
+        "#;
+        let tools = parse_tools_str(toml).unwrap();
+        assert_eq!(tools["a"].memory.as_deref(), Some("4g"));
+        assert_eq!(tools["a"].cpus, Some(2.0));
+        assert_eq!(tools["b"].memory, None);
+        assert_eq!(tools["b"].cpus, Some(1.5));
+    }
+
+    #[test]
+    fn rejects_resource_limits_podman_would_refuse() {
+        for (field, value) in [
+            ("memory", r#""""#),
+            ("memory", r#""0""#),
+            ("memory", r#""0.0g""#),
+            ("memory", r#""g""#),
+            ("memory", r#""-1g""#),
+            ("memory", r#""4gg""#),
+            ("memory", r#""4x""#),
+            ("memory", r#""1..5g""#),
+            ("cpus", "0"),
+            ("cpus", "-1"),
+            ("cpus", "nan"),
+            ("cpus", "inf"),
+        ] {
+            let toml = format!(
+                "[tools.t]\nimage = \"i\"\nbinary = \"aider\"\nproject_root = \"cwd\"\n{field} = {value}\n"
+            );
+            let err = parse_tools_str(&toml).unwrap_err();
+            assert!(
+                format!("{err:#}").contains("invalid tool `t`"),
+                "{field} = {value}: {err:#}"
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_memory_with_or_without_a_unit() {
+        for memory in [
+            "536870912",
+            "512m",
+            "4g",
+            "4G",
+            "4gb",
+            "4GiB",
+            "1.5g",
+            "2 g",
+            "100b",
+        ] {
+            let toml = format!(
+                "[tools.t]\nimage = \"i\"\nbinary = \"aider\"\nproject_root = \"cwd\"\nmemory = \"{memory}\"\n"
+            );
+            assert!(parse_tools_str(&toml).is_ok(), "should accept {memory}");
+        }
     }
 }

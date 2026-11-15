@@ -356,6 +356,12 @@ pub fn run_tool_args(
     if let Some(secs) = container.backstop_secs() {
         args.push(format!("--timeout={secs}"));
     }
+    if let Some(memory) = &tool.memory {
+        args.push(format!("--memory={memory}"));
+    }
+    if let Some(cpus) = tool.cpus {
+        args.push(format!("--cpus={cpus}"));
+    }
 
     if let Some(data_volume) = &tool.data_volume {
         args.push("-v".to_string());
@@ -487,6 +493,8 @@ mod tests {
             extra_env: HashMap::new(),
             wire_format: None,
             model_args: None,
+            memory: None,
+            cpus: None,
         }
     }
 
@@ -848,6 +856,44 @@ mod tests {
             &container,
         );
         assert!(args.iter().any(|a| a == "--timeout=120"), "{args:?}");
+    }
+
+    #[test]
+    fn run_tool_args_applies_resource_limits_only_when_configured() {
+        let provider = test_provider_config();
+        let container = RunContainer::new("t", "id", None);
+        let (args, _) = run_tool_args(
+            &test_tool_config(),
+            Path::new("/p"),
+            "t",
+            &provider,
+            None,
+            false,
+            &container,
+        );
+        assert!(!args
+            .iter()
+            .any(|a| a.starts_with("--memory") || a.starts_with("--cpus")));
+
+        let mut tool = test_tool_config();
+        tool.memory = Some("4g".into());
+        tool.cpus = Some(1.5);
+        let (args, _) = run_tool_args(
+            &tool,
+            Path::new("/p"),
+            "t",
+            &provider,
+            None,
+            false,
+            &container,
+        );
+        let image_at = args.iter().position(|a| a == "coder-sandbox").unwrap();
+        let memory_at = args.iter().position(|a| a == "--memory=4g").unwrap();
+        let cpus_at = args.iter().position(|a| a == "--cpus=1.5").unwrap();
+        assert!(
+            memory_at < image_at && cpus_at < image_at,
+            "limits must precede the image"
+        );
     }
 
     #[test]

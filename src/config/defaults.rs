@@ -28,6 +28,7 @@ wire_format = "openai_chat_completions"
 
 const DEFAULT_TOOLS: &str = r#"# wire_format: the API shape the tool's client speaks; must match the provider's wire_format.
 # model_args: how to pass the session model to the tool ({model} is substituted; "" = don't).
+# memory / cpus: optional container resource limits, e.g. memory = "4g", cpus = 2 (unlimited if omitted).
 
 [tools.aider]
 image = "coder-sandbox"
