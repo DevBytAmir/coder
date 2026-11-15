@@ -111,6 +111,7 @@ coder config check                   # validate providers.toml/tools.toml, no li
 coder doctor [--json]                # check podman, images, proxy, secrets file, PATH, provider reachability
 coder completions <shell>            # print a completion script (bash/zsh/fish/...)
 coder init                           # interactive first-run setup wizard
+coder hook pre-tool-use              # hook for coding agents
 ```
 
 `coder build` uses paths relative to the repository root by default

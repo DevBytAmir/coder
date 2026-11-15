@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 
-use coder::cli::{Cli, Command, ConfigAction, ModelsAction, ProxyAction, RunArgs};
+use coder::agent_hook;
+use coder::cli::{Cli, Command, ConfigAction, HookEvent, ModelsAction, ProxyAction, RunArgs};
 use coder::config::defaults::{write_default_providers_if_missing, write_default_tools_if_missing};
 use coder::config::providers::{load_providers, ProviderConfig};
 use coder::config::tools::{load_tools, ToolConfig};
@@ -951,6 +952,20 @@ fn do_build(fetch: bool, keep: Option<&Path>, source_dir: Option<&Path>) -> Resu
     check_status(run_podman_attached(&build_proxy_image_args(), &[])?)
 }
 
+/// Fails open: unreadable or unparseable input lets the tool call through, since a hook
+/// that errors must never block every tool call in the session.
+fn run_pre_tool_use_hook() -> Result<()> {
+    let mut raw = String::new();
+    std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw)?;
+    let Ok(input) = serde_json::from_str::<agent_hook::HookInput>(&raw) else {
+        return Ok(());
+    };
+    if let Some(reason) = agent_hook::deny_reason(&input, &config_dir()?) {
+        println!("{}", agent_hook::deny_output(reason));
+    }
+    Ok(())
+}
+
 fn main() {
     if let Err(err) = run_cli() {
         eprintln!("Error: {err:?}");
@@ -1043,6 +1058,9 @@ fn run_cli() -> Result<()> {
             proxy_entrypoint::run_proxy_admin(&method, &path, body.as_deref())
         }
         Command::ProxyAdminRevokeSelf => proxy_entrypoint::run_proxy_admin_revoke_self(),
+        Command::Hook {
+            event: HookEvent::PreToolUse,
+        } => run_pre_tool_use_hook(),
     }
 }
 

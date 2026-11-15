@@ -69,6 +69,19 @@ pub enum Command {
     /// Revoke the session token named by `$CODER_REVOKE_TOKEN` (internal, env only, never argv)
     #[command(hide = true)]
     ProxyAdminRevokeSelf,
+    /// Hooks for AI coding agents: block tool calls that would expose coder's secrets
+    Hook {
+        #[command(subcommand)]
+        event: HookEvent,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum HookEvent {
+    /// Read a `PreToolUse` event as JSON on stdin and, if the call would read the secrets
+    /// file, print the proxy's environment, or run `coder init`, print a deny. Fails open:
+    /// input it can't parse is let through.
+    PreToolUse,
 }
 
 #[derive(Subcommand)]

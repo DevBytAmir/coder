@@ -27,6 +27,12 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   proxy's network, using a throwaway container and no credentials. An
   unreachable provider is a problem if it has a key loaded, and
   information otherwise.
+- `coder hook pre-tool-use`: a `PreToolUse` hook for coding agents. It
+  denies tool calls that would read the secrets file (file reads and
+  edits, searches, shell commands, and `apply_patch` patches), run
+  `coder init`, or print the proxy's environment (`podman exec`,
+  `inspect`, or `cp` on `coder-proxy`, or reading `/proc/<pid>/environ`).
+  Input it can't parse is let through.
 
 ### Changed
 

@@ -21,7 +21,8 @@ const EXACT_MATCH_ONLY: &[&str] = &["home", "/", "/home"];
 /// fall back to a lexical normalization of `.`/`..` components so a
 /// not-yet-existing path like `/home/user/../../etc` still compares equal
 /// to `/etc`.
-fn resolve_lexical(path: &Path) -> PathBuf {
+#[must_use]
+pub fn resolve_lexical(path: &Path) -> PathBuf {
     if let Ok(canon) = path.canonicalize() {
         return canon;
     }

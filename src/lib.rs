@@ -2,6 +2,7 @@
 // swaps it, so generalizing every signature over BuildHasher is pure boilerplate.
 #![allow(clippy::implicit_hasher)]
 
+pub mod agent_hook;
 pub mod cli;
 pub mod config;
 pub mod exit;
