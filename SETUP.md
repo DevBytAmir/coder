@@ -97,6 +97,10 @@ If you'd rather run inside a Linux environment generally:
 2. Open a shell **inside** that WSL2 distro and follow the **Linux**
    steps above and below; from here on, treat WSL2 as Linux, because as
    far as `coder` is concerned, it is.
+3. Projects can live in the Linux filesystem or on a Windows drive, but
+   the guard refuses Windows drive roots, `Windows`, the `Program Files`
+   folders, `ProgramData`, `Users` and whole user profiles, just as it
+   refuses `$HOME`.
 
 ## 2. Install coder
 

@@ -14,7 +14,7 @@ use coder::config::defaults::{write_default_providers_if_missing, write_default_
 use coder::config::providers::{load_providers, ProviderConfig};
 use coder::config::tools::{load_tools, ToolConfig};
 use coder::exit::{self, ExitError};
-use coder::orchestrate::guard::{guard_confirm, Confirmation};
+use coder::orchestrate::guard::{guard_confirm, is_refused_dir, Confirmation};
 use coder::orchestrate::podman::{
     build_proxy_image_args, build_sandbox_image_args, exec_podman, network_create_args,
     network_exists_args, network_is_internal_args, network_rm_args, parse_probe_output,
@@ -315,10 +315,20 @@ fn do_run(args: &RunArgs) -> Result<i32> {
     let root_arg = existing_file_arg(&effective_cwd, args.extra_args.first().map(String::as_str));
     let (project_dir, rewritten) =
         resolve_project_dir(tool.project_root, &effective_cwd, root_arg.as_deref())?;
-    validate_bind_source(&project_dir)?;
 
     let run_id = uuid::Uuid::new_v4().simple().to_string();
     let container = RunContainer::new(&args.tool, &run_id[..12], args.timeout);
+
+    // refuse before --dry-run, so a dry run can't okay what a real run refuses
+    let home = home_dir()?;
+    if is_refused_dir(&project_dir, &home) {
+        return Err(ExitError::new(
+            exit::NOT_PERMITTED,
+            format!("aborted: not sandboxing {}", project_dir.display()),
+        )
+        .into());
+    }
+    validate_bind_source(&project_dir)?;
 
     if args.dry_run {
         let extra_args = combine_extra_args(rewritten, &args.extra_args);
@@ -340,7 +350,6 @@ fn do_run(args: &RunArgs) -> Result<i32> {
         return Ok(0);
     }
 
-    let home = home_dir()?;
     let confirmation = if args.yes {
         Confirmation::AssumeYes
     } else {

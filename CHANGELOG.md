@@ -42,6 +42,14 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Windows' canonical paths start with `\\?\`, which coder now removes.
 - Native Windows: network and WSL paths (`\\server\share`, `\\wsl$\…`)
   are refused with a clear error instead of being passed to podman.
+- The sandbox guard refuses Windows locations, natively (`C:\Windows`) and
+  from WSL (`/mnt/c/Windows`), ignoring case: drive roots, `Windows`, the
+  `Program Files` folders and `ProgramData` with everything in them, and
+  `Users` and each user profile.
+- `coder run --dry-run` refuses the directories a real run refuses, with
+  exit code 77, instead of printing a podman command for them. A refused
+  directory also exits 77 on Windows, where the bind-mount check used to
+  fail first.
 
 ## [0.5.0] - 2026-11-16
 

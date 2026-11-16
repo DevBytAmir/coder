@@ -43,6 +43,48 @@ pub fn resolve_lexical(path: &Path) -> PathBuf {
 /// True if `project_dir` is, or is a descendant of (except the `home`/`/`/`/home`
 /// exact-only entries, see [`REFUSE_LIST`]), one of the never-safe-to-sandbox directories.
 fn is_refused(canon_project: &Path, home: &Path) -> bool {
+    is_refused_windows_location(canon_project) || in_refuse_list(canon_project, home)
+}
+
+/// Windows folders never safe to sandbox, natively or under `/mnt/<drive>`: drive roots,
+/// system folders and everything in them, and `Users` and each profile (exact only).
+/// Case-insensitive.
+fn is_refused_windows_location(canon_project: &Path) -> bool {
+    const SYSTEM_DIRS: &[&str] = &[
+        "windows",
+        "program files",
+        "program files (x86)",
+        "programdata",
+    ];
+    let text = canon_project
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let parts: Vec<&str> = text.split('/').filter(|p| !p.is_empty()).collect();
+    let rest = match parts.as_slice() {
+        // native: "c:", "c:/windows", ...
+        [drive, rest @ ..]
+            if drive.len() == 2
+                && drive.ends_with(':')
+                && drive.as_bytes()[0].is_ascii_alphabetic() =>
+        {
+            rest
+        }
+        // WSL automount: "/mnt/c", "/mnt/c/windows", ...
+        ["mnt", drive, rest @ ..]
+            if drive.len() == 1 && drive.as_bytes()[0].is_ascii_alphabetic() =>
+        {
+            rest
+        }
+        _ => return false,
+    };
+    match rest {
+        [] | ["users"] | ["users", _] => true,
+        [first, ..] => SYSTEM_DIRS.contains(first),
+    }
+}
+
+fn in_refuse_list(canon_project: &Path, home: &Path) -> bool {
     REFUSE_LIST.iter().any(|entry| {
         let candidate = if *entry == "home" {
             home.to_path_buf()
@@ -54,6 +96,12 @@ fn is_refused(canon_project: &Path, home: &Path) -> bool {
         canon_project == canon_candidate
             || (!exact_match_only && canon_project.starts_with(&canon_candidate))
     })
+}
+
+/// [`guard_confirm`]'s refusal without the prompt, so `--dry-run` can refuse too.
+#[must_use]
+pub fn is_refused_dir(project_dir: &Path, home: &Path) -> bool {
+    is_refused(&resolve_lexical(project_dir), home)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +174,58 @@ mod tests {
     fn guard_refuses_home_directory() {
         let home = Path::new("/home/user");
         assert!(guard_confirm(home, home, Confirmation::Prompt, true).is_ok_and(|ok| !ok));
+    }
+
+    #[test]
+    fn guard_refuses_windows_locations_native_and_wsl() {
+        for refused in [
+            r"C:\",
+            r"E:\",
+            r"C:\Windows",
+            r"c:\windows\System32",
+            r"C:\Program Files",
+            r"C:\Program Files (x86)\Foo",
+            r"C:\ProgramData",
+            r"C:\Users",
+            r"C:\Users\user",
+            r"C:\USERS\User",
+            "/mnt/c",
+            "/mnt/e/",
+            "/mnt/c/Windows",
+            "/mnt/c/windows/system32",
+            "/mnt/c/Program Files",
+            "/mnt/c/Users",
+            "/mnt/c/Users/User",
+        ] {
+            assert!(
+                is_refused_windows_location(Path::new(refused)),
+                "{refused} should be refused"
+            );
+        }
+        for allowed in [
+            r"C:\Users\user\project",
+            r"E:\work\app",
+            r"C:\src\app",
+            "/mnt/c/Users/User/project",
+            "/mnt/e/work/app",
+            "/mnt/storage",
+            "/mnt/storage/Windows",
+            "/home/user/project",
+        ] {
+            assert!(
+                !is_refused_windows_location(Path::new(allowed)),
+                "{allowed} should be allowed"
+            );
+        }
+    }
+
+    #[test]
+    fn dry_run_refusal_matches_guard() {
+        let home = Path::new("/home/user");
+        assert!(is_refused_dir(home, home));
+        assert!(is_refused_dir(Path::new("/etc"), home));
+        assert!(is_refused_dir(Path::new("/mnt/c"), home));
+        assert!(!is_refused_dir(Path::new("/home/user/project"), home));
     }
 
     #[test]
