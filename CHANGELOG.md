@@ -11,6 +11,11 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   downloads this version's source into
   `~/.local/share/coder/source/<version>` the first time and reuses it
   afterwards.
+- `coder doctor` shows where coder keeps its files: the config
+  directory, the generated model list, and the source `coder build`
+  uses. These replace the `containers/sandbox` and `containers/proxy`
+  checks, so `coder doctor --json` reports `config directory`, `model
+  list`, and `build source` instead.
 
 ### Changed
 

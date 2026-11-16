@@ -108,7 +108,7 @@ coder run <tool> [-C dir] [--provider X] [--model Y] [--yes] [--timeout D] [--dr
 coder models refresh <provider>|--all [--secrets-file P]  # fetch + filter a provider's models
 coder models list <provider>         # print a provider's refreshed model ids
 coder config check                   # validate providers.toml/tools.toml, no live key needed
-coder doctor [--json]                # check podman, images, proxy, secrets file, PATH, provider reachability
+coder doctor [--json]                # check podman, images, file locations, proxy, secrets file, PATH, provider reachability
 coder completions <shell>            # print a completion script (bash/zsh/fish/...)
 coder init                           # interactive first-run setup wizard
 coder hook pre-tool-use              # hook for coding agents (see "Agent plugin" below)
@@ -119,6 +119,19 @@ else, for example with a standalone binary from the install script, it
 downloads this version's source into `~/.local/share/coder/source/` the
 first time and reuses it after; `--fetch` downloads it again, and
 `--source-dir <path>` builds from a checkout elsewhere.
+
+### Where coder keeps things
+
+| Path | What | Who writes it |
+|---|---|---|
+| `~/.config/coder/providers.toml`, `tools.toml` | providers and tools | created with defaults on first use; you edit them |
+| `~/.config/coder/secrets.env` | provider API keys (`chmod 600`) | you, or `coder init` |
+| `~/.config/coder/models/<provider>.json` | each provider's refreshed model list | `coder models refresh` |
+| `~/.config/coder/opencode.jsonc` | opencode's model picker, built from those lists | `coder models refresh`; `coder build` bakes it into the sandbox image |
+| `~/.local/share/coder/source/<version>/` | container files and source the images are built from | `coder build`, outside a checkout |
+
+`coder doctor` prints the ones in use. Everything under
+`~/.local/share/coder` can be deleted; `coder build` downloads it again.
 
 The proxy reads the same `~/.config/coder/providers.toml` as the host
 CLI: `coder proxy up` bind-mounts it read-only into the container, so

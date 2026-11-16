@@ -40,7 +40,8 @@ pub enum Command {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Check the local environment is ready (podman, images, proxy, PATH)
+    /// Check the local environment is ready: podman, images, file locations, proxy,
+    /// secrets file, provider reachability, and PATH
     Doctor {
         /// Print the results as JSON on stdout instead of text
         #[arg(long)]

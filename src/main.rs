@@ -496,7 +496,7 @@ fn key_status_checks() -> Result<Vec<Check>> {
 /// thing that otherwise only surfaces as a confusing failure deep into `coder run`
 /// (a missing secrets file, a missing image, a `coder` binary not on PATH).
 fn doctor_checks() -> Vec<Check> {
-    use CheckStatus::{Info, Ok, Problem};
+    use CheckStatus::{Ok, Problem};
     let mut checks = Vec::new();
 
     match std::process::Command::new("podman")
@@ -522,24 +522,64 @@ fn doctor_checks() -> Vec<Check> {
         }
     }
 
-    for dir in ["containers/sandbox", "containers/proxy"] {
-        if Path::new(dir).is_dir() {
-            checks.push(Check::new(dir, Ok, "found"));
-        } else {
-            checks.push(Check::new(
-                dir,
-                Info,
-                "not found here (fine if you're using --fetch/--source-dir with `coder \
-                 build`, otherwise run from a coder checkout)",
-            ));
-        }
-    }
-
+    location_checks(&mut checks);
     proxy_checks(&mut checks);
     secrets_checks(&mut checks);
     provider_reach_checks(&mut checks);
     binary_check(&mut checks);
     checks
+}
+
+/// Where coder keeps its files: settings and the generated model list in the config
+/// directory, and the source `coder build` would use.
+fn location_checks(checks: &mut Vec<Check>) {
+    use CheckStatus::{Info, Ok, Problem};
+    match config_dir() {
+        Result::Ok(dir) if dir.is_dir() => {
+            checks.push(Check::new(
+                "config directory",
+                Ok,
+                dir.display().to_string(),
+            ));
+        }
+        Result::Ok(dir) => checks.push(Check::new(
+            "config directory",
+            Info,
+            format!("{} (created on first use)", dir.display()),
+        )),
+        Err(e) => checks.push(Check::new("config directory", Problem, e.to_string())),
+    }
+    if let Result::Ok(path) = opencode_jsonc_path() {
+        checks.push(if path.is_file() {
+            Check::new("model list", Ok, path.display().to_string())
+        } else {
+            Check::new(
+                "model list",
+                Info,
+                "not generated; opencode uses the shipped default until `coder models \
+                 refresh`",
+            )
+        });
+    }
+    let version = env!("CARGO_PKG_VERSION");
+    checks.push(if looks_like_source_checkout(Path::new(".")) {
+        Check::new("build source", Ok, "the coder checkout in this directory")
+    } else {
+        match managed_source_dir(version) {
+            Result::Ok(dir) => match find_existing_checkout(&dir) {
+                Some(root) => Check::new("build source", Ok, root.display().to_string()),
+                None => Check::new(
+                    "build source",
+                    Info,
+                    format!(
+                        "not downloaded yet; `coder build` downloads it into {}",
+                        dir.display()
+                    ),
+                ),
+            },
+            Err(e) => Check::new("build source", Problem, e.to_string()),
+        }
+    });
 }
 
 fn proxy_checks(checks: &mut Vec<Check>) {
