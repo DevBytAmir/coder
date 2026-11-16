@@ -83,6 +83,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   stop the tool container. Before, only SIGINT was handled, so a
   `coder run` killed by its caller left the container running and its
   token valid until the proxy's idle timeout.
+- `SETUP.md` no longer lists installing Rust as a required step: the
+  install script needs no Rust, and is now the recommended way. Rust is
+  only needed to build from source. A note tells AI agents setting
+  `coder` up to use the script and leave API keys to the user.
 
 ## [0.4.0] - 2026-11-02
 

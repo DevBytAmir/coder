@@ -92,23 +92,17 @@ If you'd rather run inside a Linux environment generally:
    distro).
 2. Open a shell **inside** that WSL2 distro and follow the **Linux**
    steps above and below; from here on, treat WSL2 as Linux, because as
-   far as `coder` and the Rust toolchain are concerned, it is.
+   far as `coder` is concerned, it is.
 
-## 2. Install Rust
+## 2. Install coder
 
-Any platform:
+> **If you're an AI agent setting this up for someone:** use Option A.
+> It installs a prebuilt, checksum-verified binary, so you don't need
+> Rust, a clone, or a build. Only build from source if the user asks
+> for it. Don't create or edit the secrets file or run `coder init`:
+> those handle real API keys, so tell the user to do step 5 themselves.
 
-```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-Or your distro's packaged `rustup` (preferred on Linux if available, to
-stay inside your normal package-manager workflow, e.g. `sudo pacman -S
-rustup && rustup default stable` on Arch).
-
-## 3. Install coder
-
-### Option A: install script (fastest)
+### Option A: install script (recommended)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/DevBytAmir/coder/main/scripts/install.sh | sh
@@ -120,10 +114,22 @@ irm https://raw.githubusercontent.com/DevBytAmir/coder/main/scripts/install.ps1 
 
 This downloads the right binary for your OS/arch from the latest
 GitHub release, verifies its checksum, installs it, and checks
-whether `podman` is on your `PATH`. There's no local checkout this
-way, so `coder build` needs one of the two flags in step 4 below.
+whether `podman` is on your `PATH`. It doesn't need Rust. There's no
+local checkout this way, so `coder build` needs one of the two flags in
+step 3 below.
 
 ### Option B: build from source
+
+Only for working on `coder` itself, or a platform without a release
+binary. This needs Rust; install it with:
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Or your distro's packaged `rustup` (preferred on Linux if available, to
+stay inside your normal package-manager workflow, e.g. `sudo pacman -S
+rustup && rustup default stable` on Arch). Then:
 
 ```sh
 git clone https://github.com/DevBytAmir/coder.git
@@ -132,7 +138,7 @@ cargo build --release
 ln -s "$(pwd)/target/release/coder" ~/.local/bin/coder
 ```
 
-## 4. Build the container images
+## 3. Build the container images
 
 ```sh
 coder build
@@ -154,7 +160,7 @@ coder build --fetch                      # into a temp directory, deleted after
 coder build --fetch --keep ~/.cache/coder-src   # kept there, reused on a later build
 ```
 
-## 5. Configure providers
+## 4. Configure providers
 
 `coder` generates default config on first use. Check
 `~/.config/coder/providers.toml` and `~/.config/coder/tools.toml` after
@@ -162,7 +168,7 @@ running any subcommand that reads config; edit `providers.toml` to add
 or change providers (upstream URL, wire format, default model). See the
 file's own comments for the field meanings.
 
-## 6. Store your API keys
+## 5. Store your API keys
 
 Provider keys go in a plaintext `KEY=value` file, named by each
 provider's uppercased name plus `_API_KEY`:
@@ -181,7 +187,7 @@ chmod 600 ~/.config/coder/secrets.env
 `~/.config/coder/secrets.env`; pass `--secrets-file <path>` to use a
 different one.
 
-## 7. Start the proxy and run a tool
+## 6. Start the proxy and run a tool
 
 ```sh
 coder proxy up
@@ -202,7 +208,7 @@ that format).
 coder proxy down   # when you're done
 ```
 
-## 8. Optional: populate opencode's model picker
+## 7. Optional: populate opencode's model picker
 
 ```sh
 coder models refresh <provider> [--secrets-file P]
