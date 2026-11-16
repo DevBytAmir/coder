@@ -20,6 +20,25 @@ fn strip_matching_quotes(value: &str) -> &str {
     value
 }
 
+/// A Windows drive under WSL (`/mnt/c/...`), where `chmod` doesn't stick.
+#[cfg(unix)]
+fn on_wsl_windows_drive(path: &std::path::Path) -> bool {
+    let in_wsl = std::env::var_os("WSL_DISTRO_NAME").is_some()
+        || std::path::Path::new("/proc/sys/fs/binfmt_misc/WSLInterop").exists();
+    in_wsl && is_windows_drive_mount(path)
+}
+
+/// `/mnt/<letter>/...`, where WSL mounts Windows drives.
+#[cfg(unix)]
+fn is_windows_drive_mount(path: &std::path::Path) -> bool {
+    let mut parts = path.components().map(|c| c.as_os_str().to_string_lossy());
+    parts.next().as_deref() == Some("/")
+        && parts.next().as_deref() == Some("mnt")
+        && parts
+            .next()
+            .is_some_and(|d| d.len() == 1 && d.as_bytes()[0].is_ascii_alphabetic())
+}
+
 /// Reads provider API keys from a plaintext `KEY=value` file (e.g. `ANTHROPIC_API_KEY=abc`).
 /// Refuses to read the file at all unless its permissions are exactly owner read/write (0600).
 pub struct FileSource {
@@ -35,6 +54,15 @@ impl SecretsSource for FileSource {
         {
             let mode = file.metadata()?.permissions().mode();
             if mode & 0o077 != 0 {
+                if on_wsl_windows_drive(&self.path) {
+                    anyhow::bail!(
+                        "secrets file {} has loose permissions, and `chmod` can't fix that on a \
+                         Windows drive mounted in WSL; keep the file in the Linux filesystem \
+                         (e.g. ~/.config/coder/secrets.env, mode 600), or enable `metadata` for \
+                         the drive in /etc/wsl.conf",
+                        self.path.display()
+                    );
+                }
                 anyhow::bail!(
                     "secrets file {} has loose permissions; run `chmod 600 {}`",
                     self.path.display(),
@@ -76,6 +104,22 @@ impl SecretsSource for FileSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn windows_drive_mounts_are_mnt_and_one_letter() {
+        use std::path::Path;
+        assert!(is_windows_drive_mount(Path::new(
+            "/mnt/c/Users/u/secrets.env"
+        )));
+        assert!(is_windows_drive_mount(Path::new("/mnt/E/x")));
+        assert!(!is_windows_drive_mount(Path::new(
+            "/mnt/storage/secrets.env"
+        )));
+        assert!(!is_windows_drive_mount(Path::new(
+            "/home/u/.config/coder/secrets.env"
+        )));
+    }
 
     #[cfg(unix)]
     fn set_owner_only(path: &std::path::Path) {

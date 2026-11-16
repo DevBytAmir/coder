@@ -101,6 +101,9 @@ If you'd rather run inside a Linux environment generally:
    the guard refuses Windows drive roots, `Windows`, the `Program Files`
    folders, `ProgramData`, `Users` and whole user profiles, just as it
    refuses `$HOME`.
+4. Keep `~/.config/coder/secrets.env` in the Linux filesystem: on a
+   Windows drive (`/mnt/c/…`) `chmod 600` doesn't stick, so `coder`
+   refuses the file.
 
 ## 2. Install coder
 

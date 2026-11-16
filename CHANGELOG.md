@@ -67,6 +67,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Windows.
 - Shell completion scripts no longer offer the hidden internal commands
   (`proxy-serve`, `proxy-admin`, `proxy-admin-revoke-self`).
+- In WSL, a secrets file on a Windows drive (`/mnt/c/…`) gets an error
+  that explains `chmod` can't fix its permissions there, instead of
+  suggesting `chmod 600`.
 
 ## [0.5.0] - 2026-11-16
 
