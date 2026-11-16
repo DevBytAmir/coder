@@ -89,7 +89,7 @@ installs software on their machine.
 2. If the script reports that podman isn't found, ask the user to
    install it. That needs their package manager and `sudo`, so don't do
    it yourself.
-3. Build the container images with `coder build --fetch`. It takes
+3. Build the container images with `coder build`. It takes
    several minutes; say so.
 4. Ask the user to set up their provider keys themselves, with `coder
    init` or by editing the secrets file. Never run `coder init` or touch

@@ -5,6 +5,13 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- `coder build` works outside a coder checkout without flags: it
+  downloads this version's source into
+  `~/.local/share/coder/source/<version>` the first time and reuses it
+  afterwards.
+
 ### Changed
 
 - `coder models refresh` writes the generated opencode config to
@@ -13,6 +20,14 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   works outside a checkout. `coder build` bakes that file into the
   sandbox image, and a plain `coder build` no longer resets opencode's
   model picker to the shipped default.
+- `coder build --fetch` downloads into that same directory, replacing
+  the copy there, instead of a temporary directory deleted after the
+  build.
+
+### Removed
+
+- `coder build --keep`. The downloaded source is now always kept, in
+  `~/.local/share/coder/source/<version>`.
 
 ### Fixed
 

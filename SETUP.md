@@ -115,8 +115,8 @@ irm https://raw.githubusercontent.com/DevBytAmir/coder/main/scripts/install.ps1 
 This downloads the right binary for your OS/arch from the latest
 GitHub release, verifies its checksum, installs it, and checks
 whether `podman` is on your `PATH`. It doesn't need Rust. There's no
-local checkout this way, so `coder build` needs one of the two flags in
-step 3 below.
+local checkout this way; `coder build` in step 3 downloads what it
+needs.
 
 ### Option B: build from source
 
@@ -144,20 +144,15 @@ ln -s "$(pwd)/target/release/coder" ~/.local/bin/coder
 coder build
 ```
 
-**Must run from the repo root** if you built from source, since
-`coder build` uses paths relative to it by default. If you used the
-install script instead and have no local checkout, either point it at
-a checkout you have elsewhere:
+Run it from anywhere. Outside a coder checkout, it downloads this
+version's container files and source from GitHub into
+`~/.local/share/coder/source/<version>` the first time, and reuses that
+copy afterwards. Inside a checkout, it builds from the checkout, so your
+local changes are what gets built.
 
 ```sh
-coder build --source-dir /path/to/coder
-```
-
-Or have it download the matching tagged source itself:
-
-```sh
-coder build --fetch                      # into a temp directory, deleted after
-coder build --fetch --keep ~/.cache/coder-src   # kept there, reused on a later build
+coder build --fetch                        # download the kept copy again
+coder build --source-dir /path/to/coder    # build from a checkout elsewhere
 ```
 
 ## 4. Configure providers

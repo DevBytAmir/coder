@@ -33,15 +33,15 @@ pub fn find_single_subdir(dir: &Path) -> Result<PathBuf> {
     }
 }
 
-/// True if `dir` already looks like an extracted `coder` checkout, for `--keep`'s
-/// reuse-without-redownloading check.
+/// True if `dir` already looks like an extracted `coder` checkout, so `coder build`
+/// can reuse it instead of downloading again.
 #[must_use]
 pub fn looks_like_source_checkout(dir: &Path) -> bool {
     dir.join("Cargo.toml").is_file() && dir.join("containers").is_dir()
 }
 
 /// `fetch_source` extracts into a subdirectory of `dest` (GitHub's tarball layout),
-/// so a `--keep <dest>` reuse check has to look one level deeper than `dest` itself.
+/// so the reuse check has to look one level deeper than `dest` itself.
 /// Returns that subdirectory if `dest` exists and it looks like a real checkout.
 #[must_use]
 pub fn find_existing_checkout(dest: &Path) -> Option<PathBuf> {

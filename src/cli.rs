@@ -14,16 +14,12 @@ pub struct Cli {
 pub enum Command {
     /// Build the sandbox and proxy images
     Build {
-        /// Download the matching tagged source from GitHub and build from it, instead
-        /// of the current directory. For a standalone release binary with no local
-        /// checkout.
+        /// Download this version's source from GitHub again, replacing the copy coder
+        /// keeps in ~/.local/share/coder/source/<version>. Without it, `coder build`
+        /// uses a coder checkout in the current directory, or that kept copy,
+        /// downloading it the first time.
         #[arg(long, conflicts_with = "source_dir")]
         fetch: bool,
-        /// With --fetch, extract the downloaded source here instead of a temp
-        /// directory that gets deleted after the build. Reused (skipping the
-        /// download) on a later `coder build --fetch --keep` if already present.
-        #[arg(long, requires = "fetch")]
-        keep: Option<PathBuf>,
         /// Build from an existing local checkout at this path instead of the
         /// current directory.
         #[arg(long, conflicts_with = "fetch")]

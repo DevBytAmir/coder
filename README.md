@@ -114,10 +114,11 @@ coder init                           # interactive first-run setup wizard
 coder hook pre-tool-use              # hook for coding agents (see "Agent plugin" below)
 ```
 
-`coder build` uses paths relative to the repository root by default
-(`containers/sandbox`, `containers/proxy/Containerfile`, and `.` as the
-proxy build context); pass `--fetch` or `--source-dir <path>` instead
-if you installed a standalone binary with no local checkout.
+`coder build` builds from the coder checkout you run it in. Anywhere
+else, for example with a standalone binary from the install script, it
+downloads this version's source into `~/.local/share/coder/source/` the
+first time and reuses it after; `--fetch` downloads it again, and
+`--source-dir <path>` builds from a checkout elsewhere.
 
 The proxy reads the same `~/.config/coder/providers.toml` as the host
 CLI: `coder proxy up` bind-mounts it read-only into the container, so
@@ -263,7 +264,7 @@ ANTHROPIC_API_KEY=sk-...
 EOF
 chmod 600 ~/.config/coder/secrets.env
 
-coder build --fetch
+coder build
 coder proxy up
 coder run aider -C ~/path/to/project
 ```

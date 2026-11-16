@@ -904,56 +904,18 @@ impl Drop for CwdGuard {
     }
 }
 
-/// Holds whatever this build's source resolution needs kept alive: the cwd guard
-/// (dropped first, so the shell's original directory is restored before any temp
-/// directory below is deleted) and, for a `--fetch` without `--keep`, the temp
-/// directory itself (dropped second, deleting it once the build no longer needs it).
-#[allow(dead_code, reason = "fields exist only for their Drop side effects")]
-struct BuildSource {
-    cwd_guard: Option<CwdGuard>,
-    temp_dir: Option<tempfile::TempDir>,
+/// Where `coder build` keeps downloaded source, one directory per version.
+fn managed_source_dir(version: &str) -> Result<PathBuf> {
+    Ok(home_dir()?
+        .join(".local/share/coder/source")
+        .join(format!("v{version}")))
 }
 
-/// Resolves which source tree to build the images from (see `coder build --help` for
-/// the three options).
-fn resolve_build_source(
-    fetch: bool,
-    keep: Option<&Path>,
-    source_dir: Option<&Path>,
-) -> Result<BuildSource> {
-    if fetch {
-        let version = env!("CARGO_PKG_VERSION");
-        if let Some(keep_dir) = keep {
-            if let Some(root) = find_existing_checkout(keep_dir) {
-                println!(
-                    "using source already kept at {} (skipping download)",
-                    root.display()
-                );
-                return Ok(BuildSource {
-                    cwd_guard: Some(CwdGuard::enter(&root)?),
-                    temp_dir: None,
-                });
-            }
-            std::fs::create_dir_all(keep_dir)
-                .with_context(|| format!("creating {}", keep_dir.display()))?;
-            println!(
-                "fetching coder v{version} source from GitHub into {}...",
-                keep_dir.display()
-            );
-            let root = fetch_source(GITHUB_REPO, version, keep_dir)?;
-            return Ok(BuildSource {
-                cwd_guard: Some(CwdGuard::enter(&root)?),
-                temp_dir: None,
-            });
-        }
-        let temp = tempfile::tempdir().context("creating a temp directory")?;
-        println!("fetching coder v{version} source from GitHub...");
-        let root = fetch_source(GITHUB_REPO, version, temp.path())?;
-        return Ok(BuildSource {
-            cwd_guard: Some(CwdGuard::enter(&root)?),
-            temp_dir: Some(temp),
-        });
-    }
+/// Resolves which source tree to build the images from: `--source-dir`, a coder
+/// checkout in the current directory, or this version's source under
+/// `~/.local/share/coder/source/`, downloaded the first time and again with `--fetch`.
+/// The returned guard restores the original working directory once the build is done.
+fn resolve_build_source(fetch: bool, source_dir: Option<&Path>) -> Result<Option<CwdGuard>> {
     if let Some(dir) = source_dir {
         if !looks_like_source_checkout(dir) {
             bail!(
@@ -962,26 +924,48 @@ fn resolve_build_source(
             );
         }
         println!("building from {}", dir.display());
-        return Ok(BuildSource {
-            cwd_guard: Some(CwdGuard::enter(dir)?),
-            temp_dir: None,
-        });
+        return Ok(Some(CwdGuard::enter(dir)?));
     }
-    if !looks_like_source_checkout(Path::new(".")) {
-        bail!(
-            "no containers/ directory here; run from a coder checkout, pass \
-             --source-dir <path>, or use --fetch to download the matching source \
-             from GitHub"
-        );
+    if !fetch && looks_like_source_checkout(Path::new(".")) {
+        return Ok(None);
     }
-    Ok(BuildSource {
-        cwd_guard: None,
-        temp_dir: None,
-    })
+    let version = env!("CARGO_PKG_VERSION");
+    let dest = managed_source_dir(version)?;
+    let root = match find_existing_checkout(&dest) {
+        Some(root) if !fetch => {
+            println!("using coder v{version} source at {}", root.display());
+            root
+        }
+        _ => download_source(version, &dest)?,
+    };
+    Ok(Some(CwdGuard::enter(&root)?))
 }
 
-fn do_build(fetch: bool, keep: Option<&Path>, source_dir: Option<&Path>) -> Result<()> {
-    let _source = resolve_build_source(fetch, keep, source_dir)?;
+/// Downloads this version's source into `dest`, replacing what's there only once the
+/// download has fully succeeded, and returns the extracted source root.
+fn download_source(version: &str, dest: &Path) -> Result<PathBuf> {
+    let parent = dest.parent().context("source directory has no parent")?;
+    std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    println!(
+        "downloading coder v{version} source from GitHub into {}...",
+        dest.display()
+    );
+    let staging = tempfile::tempdir_in(parent).context("creating a staging directory")?;
+    fetch_source(GITHUB_REPO, version, staging.path())?;
+    if dest.exists() {
+        std::fs::remove_dir_all(dest).with_context(|| format!("removing {}", dest.display()))?;
+    }
+    let staged = staging.keep();
+    if let Err(err) = std::fs::rename(&staged, dest) {
+        let _ = std::fs::remove_dir_all(&staged);
+        return Err(err).with_context(|| format!("moving the source into {}", dest.display()));
+    }
+    find_existing_checkout(dest)
+        .with_context(|| format!("{} doesn't contain a coder checkout", dest.display()))
+}
+
+fn do_build(fetch: bool, source_dir: Option<&Path>) -> Result<()> {
+    let _source = resolve_build_source(fetch, source_dir)?;
     let (sandbox_context, _staged) =
         sandbox_build_context(Path::new("containers/sandbox"), &opencode_jsonc_path()?)?;
     check_status(run_podman_attached(
@@ -1033,11 +1017,7 @@ fn run_cli() -> Result<()> {
     let cli = Cli::parse();
     restore_default_sigpipe(&cli.command);
     match cli.command {
-        Command::Build {
-            fetch,
-            keep,
-            source_dir,
-        } => do_build(fetch, keep.as_deref(), source_dir.as_deref()),
+        Command::Build { fetch, source_dir } => do_build(fetch, source_dir.as_deref()),
         Command::Proxy { action } => match action {
             ProxyAction::Up { secrets_file } => do_proxy_up(secrets_file.as_deref()),
             ProxyAction::Down => {

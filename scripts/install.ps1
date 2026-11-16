@@ -77,5 +77,5 @@ if (Get-Command podman -ErrorAction SilentlyContinue) {
 
 Write-Host ""
 Write-Host "Next steps:"
-Write-Host "  coder build --fetch   # or --source-dir <path> if you have a checkout"
+Write-Host "  coder build   # downloads this version's container files the first time"
 Write-Host "  coder init"

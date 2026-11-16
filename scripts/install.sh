@@ -127,5 +127,5 @@ fi
 
 say ""
 say "Next steps:"
-say "  coder build --fetch   # or --source-dir <path> if you have a checkout"
+say "  coder build   # downloads this version's container files the first time"
 say "  coder init"
