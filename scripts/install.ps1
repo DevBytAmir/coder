@@ -21,9 +21,17 @@ if ($env:CODER_VERSION) {
     $Tag = "v$($env:CODER_VERSION)"
 } else {
     Write-Host "looking up the latest release..."
-    $Release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
-    $Tag = $Release.tag_name
-    if (-not $Tag) { throw "could not determine the latest release tag" }
+    # The web URL redirects to .../releases/tag/<tag>. Unlike api.github.com, it isn't
+    # limited to 60 anonymous requests an hour per IP, which shared IPs and CI hit.
+    $Response = Invoke-WebRequest -Uri "https://github.com/$Repo/releases/latest" -Method Head -UseBasicParsing
+    # PowerShell 7 has the final URL on RequestMessage, Windows PowerShell 5.1 on ResponseUri.
+    $FinalUri = if ($Response.BaseResponse.RequestMessage) {
+        $Response.BaseResponse.RequestMessage.RequestUri
+    } else {
+        $Response.BaseResponse.ResponseUri
+    }
+    $Tag = "$FinalUri" -replace '^.*/tag/', ''
+    if ($Tag -notmatch '^v[0-9]') { throw "could not determine the latest release tag (got $FinalUri)" }
 }
 
 $BaseUrl = "https://github.com/$Repo/releases/download/$Tag"

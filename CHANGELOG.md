@@ -76,9 +76,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `ANTHROPIC_API_KEY=""`) are now ignored instead of being loaded as an
   empty key, so `coder doctor` no longer reports an unset provider key
   as loaded.
-- `scripts/install.sh` finds the latest release through the GitHub web
-  redirect instead of the API, which allows only 60 anonymous requests
-  an hour per IP.
+- `scripts/install.sh` and `scripts/install.ps1` find the latest release
+  through the GitHub web redirect instead of the API, which allows only
+  60 anonymous requests an hour per IP.
 - A missing secrets file is reported with its path.
 - `coder models refresh` works for providers without a key (Ollama),
   and for upstreams at `host.containers.internal`, which only resolves
