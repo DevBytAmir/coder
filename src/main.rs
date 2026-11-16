@@ -9,7 +9,9 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 
 use coder::agent_hook;
-use coder::cli::{Cli, Command, ConfigAction, HookEvent, ModelsAction, ProxyAction, RunArgs};
+use coder::cli::{
+    completion_command, Cli, Command, ConfigAction, HookEvent, ModelsAction, ProxyAction, RunArgs,
+};
 use coder::config::defaults::{write_default_providers_if_missing, write_default_tools_if_missing};
 use coder::config::providers::{load_providers, ProviderConfig};
 use coder::config::tools::{load_tools, ToolConfig};
@@ -1108,7 +1110,7 @@ fn run_cli() -> Result<()> {
         Command::Completions { shell } => {
             clap_complete::generate(
                 shell,
-                &mut <Cli as clap::CommandFactory>::command(),
+                &mut completion_command(),
                 "coder",
                 &mut std::io::stdout(),
             );

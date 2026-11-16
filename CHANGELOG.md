@@ -65,6 +65,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   reporting "coder binary: not found on PATH" and exiting 1.
 - The path to `~/.local/share/coder/source` uses one separator style on
   Windows.
+- Shell completion scripts no longer offer the hidden internal commands
+  (`proxy-serve`, `proxy-admin`, `proxy-admin-revoke-self`).
 
 ## [0.5.0] - 2026-11-16
 

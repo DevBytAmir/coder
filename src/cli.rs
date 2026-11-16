@@ -10,6 +10,24 @@ pub struct Cli {
     pub command: Command,
 }
 
+/// The CLI for completion scripts, minus hidden subcommands, which `clap_complete`
+/// would list.
+#[must_use]
+pub fn completion_command() -> clap::Command {
+    let full = <Cli as clap::CommandFactory>::command();
+    let mut cmd = clap::Command::new("coder").version(env!("CARGO_PKG_VERSION"));
+    if let Some(about) = full.get_about() {
+        cmd = cmd.about(about.clone());
+    }
+    for arg in full.get_arguments() {
+        cmd = cmd.arg(arg.clone());
+    }
+    for sub in full.get_subcommands().filter(|s| !s.is_hide_set()) {
+        cmd = cmd.subcommand(sub.clone());
+    }
+    cmd
+}
+
 #[derive(Subcommand)]
 pub enum Command {
     /// Build the sandbox and proxy images
@@ -240,5 +258,22 @@ mod tests {
         assert!(args.yes);
         assert_eq!(args.timeout, Some(Duration::from_mins(30)));
         assert_eq!(args.extra_args, vec!["-p", "fix the tests"]);
+    }
+
+    #[test]
+    fn completions_leave_out_hidden_subcommands() {
+        for shell in [
+            clap_complete::Shell::Bash,
+            clap_complete::Shell::PowerShell,
+            clap_complete::Shell::Zsh,
+            clap_complete::Shell::Fish,
+        ] {
+            let mut out = Vec::new();
+            clap_complete::generate(shell, &mut super::completion_command(), "coder", &mut out);
+            let script = String::from_utf8(out).unwrap();
+            assert!(!script.contains("proxy-serve"), "{shell:?}");
+            assert!(!script.contains("proxy-admin"), "{shell:?}");
+            assert!(script.contains("doctor"), "{shell:?}");
+        }
     }
 }
