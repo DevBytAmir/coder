@@ -1,0 +1,72 @@
+name: Bug report
+description: Something in coder doesn't work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste API keys or the contents of `secrets.env`.** Nothing below needs them: `coder doctor` only says whether a key is loaded, not what it is.
+        Security problems, such as a way for a sandboxed agent to reach a real key or the open network, go to [private vulnerability reporting](https://github.com/DevBytAmir/coder/security/advisories/new), not here.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands, from a clean state if you can.
+      placeholder: |
+        1. coder proxy up
+        2. coder run aider -C ~/project --provider ollama
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: coder version
+      description: Output of `coder --version`.
+      placeholder: coder 0.4.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows (native)
+        - Windows (WSL2)
+    validations:
+      required: true
+  - type: input
+    id: podman
+    attributes:
+      label: podman version
+      description: Output of `podman --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: coder doctor output
+      description: Output of `coder doctor`. It contains no keys.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Error output
+      description: Anything coder printed, especially `Error:` lines and the exit code. Remove anything private, like paths you'd rather not share.
+      render: text
+  - type: input
+    id: agent
+    attributes:
+      label: Agent, if you used the plugin
+      description: Which coding agent and its version, for example Claude Code 2.1.325 or Codex 0.169.0.

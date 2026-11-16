@@ -271,6 +271,14 @@ coder run aider -C ~/path/to/project
 Or run `coder init` for an interactive wizard that sets up config and
 secrets (still requires Podman and an installed `coder` binary first).
 
+## Reporting bugs
+
+Open an issue with the bug-report form. It asks for `coder --version`,
+your OS, `podman --version`, and `coder doctor` output, which together
+answer most first questions. Never paste API keys or your secrets file:
+nothing in the form needs them. Report security problems privately
+instead, as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
 Apache-2.0, see [LICENSE](LICENSE).

@@ -44,6 +44,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The `run-in-sandbox` skill covers installing `coder` when it's
   missing: with the install script rather than a source build, and with
   Podman and API keys left to the user.
+- A GitHub bug-report form asking for the version, OS, podman version,
+  and `coder doctor` output, with security reports pointed to private
+  vulnerability reporting instead.
 
 ### Changed
 
