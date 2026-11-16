@@ -38,6 +38,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `run-in-sandbox` skill, which teaches the agent to hand tasks to
   `coder run`, and the hook above, which keeps provider keys out of the
   agent's context.
+- `scripts/bump-version.sh`: sets the version in `Cargo.toml`,
+  `Cargo.lock`, the plugin manifests, and the README badge. CI runs it
+  with `--check` to catch versions that disagree.
 
 ### Changed
 
