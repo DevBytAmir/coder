@@ -56,6 +56,11 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `coder models refresh` keeps `coder/default` as opencode's default
   model instead of the first id alphabetically, which could be a model
   that can't chat.
+- `coder hook pre-tool-use` denies `coder.exe init`, and on Windows
+  catches secrets-file reads and `coder init` whatever the letter case
+  (`gc ~\.CONFIG\Coder\secrets.env`).
+- The plugin's hook command is plain `coder hook pre-tool-use`, so it
+  also runs under cmd.exe.
 
 ## [0.5.0] - 2026-11-16
 

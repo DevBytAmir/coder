@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "coder hook pre-tool-use; exit 0",
+            "command": "coder hook pre-tool-use",
             "timeout": 10
           }
         ]

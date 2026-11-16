@@ -88,6 +88,12 @@ pub fn deny_reason(input: &HookInput, config_dir: &Path) -> Option<&'static str>
         }
         Action::Shell(command) => {
             let command = command.replace('\\', "/");
+            // Windows ignores case in paths and program names
+            let command = if cfg!(windows) {
+                command.to_ascii_lowercase()
+            } else {
+                command
+            };
             if runs_coder_init(&command) {
                 return Some(INIT_REASON);
             }
@@ -159,7 +165,13 @@ fn touches_secrets(command: &str, cwd_is_config_dir: bool) -> bool {
 fn runs_coder_init(command: &str) -> bool {
     command_words(command)
         .windows(2)
-        .any(|pair| (pair[0] == "coder" || pair[0].ends_with("/coder")) && pair[1] == "init")
+        .any(|pair| is_program(pair[0], "coder") && pair[1] == "init")
+}
+
+/// Whether `word` runs `name`: bare, by path, or with `.exe`.
+fn is_program(word: &str, name: &str) -> bool {
+    let base = word.rsplit('/').next().unwrap_or(word);
+    base.strip_suffix(".exe").unwrap_or(base) == name
 }
 
 /// `podman exec`/`inspect`/`cp` on the proxy, or reading a process's environment from
@@ -169,9 +181,7 @@ fn exposes_proxy_env(command: &str) -> bool {
         return true;
     }
     let words = command_words(command);
-    words
-        .iter()
-        .any(|w| *w == "podman" || w.ends_with("/podman"))
+    words.iter().any(|w| is_program(w, "podman"))
         && words
             .iter()
             .any(|w| matches!(*w, "exec" | "inspect" | "cp"))
@@ -328,6 +338,36 @@ mod tests {
         for command in ["coder doctor --json", "git init", "echo coder initialize"] {
             assert_eq!(bash(command), None, "{command}");
         }
+    }
+
+    #[test]
+    fn coder_exe_init_is_denied() {
+        for command in [
+            "coder.exe init",
+            r"C:\Users\u\AppData\Local\coder\bin\coder.exe init",
+            r#"& "C:\Program Files\coder\coder.exe" init"#,
+            "./coder.exe init",
+        ] {
+            assert_eq!(bash(command), Some(INIT_REASON), "{command}");
+        }
+        assert_eq!(bash("coderx.exe init"), None);
+        assert_eq!(
+            bash("podman.exe exec coder-proxy env"),
+            Some(PROXY_ENV_REASON)
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_shell_commands_match_case_insensitively() {
+        for command in [
+            r"gc ~\.CONFIG\Coder\secrets.env",
+            r"type C:\USERS\u\.Config\CODER\SECRETS.ENV",
+            "CODER.EXE INIT",
+        ] {
+            assert!(bash(command).is_some(), "{command}");
+        }
+        assert_eq!(bash(r"gc ~\.CONFIG\Coder\Providers.toml"), None);
     }
 
     #[test]

@@ -253,10 +253,10 @@ shell, and `apply_patch` calls, and denies:
 - `podman exec`, `inspect`, or `cp` on `coder-proxy`, and reading
   `/proc/<pid>/environ`, which would print the proxy's environment
 
-The agent sees the reason and is told to ask you instead. `coder` must
-be on `PATH`. If it isn't, or the installed `coder` is too old to have
-that command, the hook lets every call through rather than blocking your
-session. It is a guardrail against accidents, not a security boundary:
+The agent sees the reason and is told to ask you instead. The hook runs
+`coder hook pre-tool-use`, so `coder` must be on `PATH`; if it isn't, the
+agent reports a hook error and carries on. It is a guardrail against
+accidents, not a security boundary:
 it matches known paths and commands, and it protects only the default
 secrets file, not one passed with `--secrets-file`. See the trust
 boundary in [SECURITY.md](SECURITY.md).
