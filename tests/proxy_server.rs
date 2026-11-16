@@ -555,6 +555,40 @@ async fn session_model_overrides_requested_model() {
 }
 
 #[tokio::test]
+async fn unpinned_session_maps_the_default_placeholder_to_the_providers_default_model() {
+    let mock_upstream = MockServer::start().await;
+    Mock::given(any())
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .mount(&mock_upstream)
+        .await;
+    let mut provider = openai_provider(&mock_upstream.uri());
+    provider.default_model = Some("meta/real-chat-model".into());
+    let state = state_with(vec![("test", provider, Some("k"))]);
+    // opencode runs unpinned (it has no model flag) and sends its fixed placeholder
+    let token = state
+        .tokens
+        .mint("test".into(), None, Duration::from_secs(60));
+    let app = public_router(Arc::new(state));
+
+    for requested in ["coder/default", "default"] {
+        let (status, _, _) = post_json(
+            app.clone(),
+            "/v1/chat/completions",
+            &[("Authorization", &format!("Bearer {token}"))],
+            json!({"model": requested, "messages": []}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    let received = mock_upstream.received_requests().await.unwrap();
+    assert_eq!(received.len(), 2);
+    for request in &received {
+        let sent: Value = serde_json::from_slice(&request.body).unwrap();
+        assert_eq!(sent["model"], "meta/real-chat-model");
+    }
+}
+
+#[tokio::test]
 async fn unpinned_session_strips_a_coder_prefix_from_the_requested_model() {
     let mock_upstream = MockServer::start().await;
     Mock::given(any())

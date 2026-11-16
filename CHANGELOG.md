@@ -50,6 +50,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   exit code 77, instead of printing a podman command for them. A refused
   directory also exits 77 on Windows, where the bind-mount check used to
   fail first.
+- opencode works without picking a model: the proxy replaces its
+  `default` placeholder with the provider's `default_model`. It used to
+  be sent upstream as is and fail with 404.
 
 ## [0.5.0] - 2026-11-16
 

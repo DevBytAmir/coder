@@ -166,7 +166,7 @@ fn authorize<'a>(
 /// The token is the authorization for one specific model, so the session's model
 /// overrides whatever the tool asked for (rather than rejecting): tools like opencode
 /// send a fixed placeholder model name and rely on this.
-fn apply_session_model(body: &mut Value, session: &Session) {
+fn apply_session_model(body: &mut Value, session: &Session, provider: &ProviderConfig) {
     if let (Some(model), Some(obj)) = (&session.model, body.as_object_mut()) {
         if obj.get("model") != Some(&Value::String(model.clone())) {
             eprintln!(
@@ -182,6 +182,18 @@ fn apply_session_model(body: &mut Value, session: &Session) {
         // key verbatim instead of the bare upstream id, so it isn't rejected by mistake.
         if let Some(bare) = requested.strip_prefix("coder/") {
             *requested = bare.to_string();
+        }
+        // opencode's placeholder model (containers/sandbox/opencode.jsonc)
+        if requested == "default" {
+            if let Some(model) = &provider.default_model {
+                requested.clone_from(model);
+            } else {
+                eprintln!(
+                    "coder-proxy: `{}` has no default_model in providers.toml, so the \
+                     `default` placeholder model is sent upstream as is",
+                    session.provider
+                );
+            }
         }
     }
 }
@@ -203,7 +215,7 @@ async fn handle_public_request(
             return (StatusCode::BAD_REQUEST, format!("invalid JSON body: {e}")).into_response()
         }
     };
-    apply_session_model(&mut body, &session);
+    apply_session_model(&mut body, &session, provider);
     let wants_stream = body.get("stream") == Some(&Value::Bool(true));
 
     let agent_req = AgentRequest {
