@@ -47,6 +47,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A GitHub bug-report form asking for the version, OS, podman version,
   and `coder doctor` output, with security reports pointed to private
   vulnerability reporting instead.
+- `CONTRIBUTING.md`: the checks CI runs, the commit convention, and the
+  release steps.
 
 ### Changed
 

@@ -279,6 +279,11 @@ answer most first questions. Never paste API keys or your secrets file:
 nothing in the form needs them. Report security problems privately
 instead, as described in [SECURITY.md](SECURITY.md).
 
+## Contributing
+
+To work on `coder` itself, see [CONTRIBUTING.md](CONTRIBUTING.md): the
+checks CI runs, the commit convention, and how releases are made.
+
 ## License
 
 Apache-2.0, see [LICENSE](LICENSE).
