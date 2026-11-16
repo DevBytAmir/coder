@@ -245,20 +245,22 @@ pub fn regenerate_opencode_config(opencode_jsonc_path: &Path, config_dir: &Path)
     let mut ids: Vec<&String> = providers_by_id.keys().collect();
     ids.sort();
 
-    let models_json = serde_json::Map::from_iter(ids.iter().map(|id| {
+    // keep `coder/default` as the default: the proxy maps it to the provider's default_model
+    let mut models_json = serde_json::Map::new();
+    models_json.insert(
+        "default".to_string(),
+        serde_json::json!({ "name": "coder session model (the provider's default_model)" }),
+    );
+    models_json.extend(ids.iter().map(|id| {
         let mut tags = providers_by_id[*id].clone();
         tags.sort();
         let label = format!("[{}] {}", tags.join(", "), humanize(id));
         ((*id).clone(), serde_json::json!({ "name": label }))
     }));
 
-    let default_model = ids
-        .first()
-        .map_or_else(|| "coder/default".to_string(), |id| format!("coder/{id}"));
-
     let doc = serde_json::json!({
         "$schema": "https://opencode.ai/config.json",
-        "model": default_model,
+        "model": "coder/default",
         "permission": {
             "bash": {
                 "*": "ask",
@@ -418,6 +420,16 @@ mod tests {
         assert!(written.contains("meta/a"));
         assert!(written.contains("openai/b"));
         assert!(written.contains("{env:OPENAI_API_BASE}"));
+        let doc: Value = serde_json::from_str(
+            &written
+                .lines()
+                .filter(|l| !l.trim_start().starts_with("//"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        )
+        .unwrap();
+        assert_eq!(doc["model"], "coder/default");
+        assert!(doc["provider"]["coder"]["models"]["default"].is_object());
     }
 
     #[test]
