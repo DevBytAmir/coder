@@ -61,6 +61,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   just revokes its session token.
 - When a signal kills the tool container's podman process, `coder run`
   exits with 128 + the signal number instead of 1.
+- When podman is missing, `scripts/install.sh` prints the install
+  command for the detected Linux distro, read from `/etc/os-release`,
+  instead of a list for three distro families.
 
 ### Fixed
 

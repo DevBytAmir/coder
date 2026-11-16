@@ -33,6 +33,22 @@ detect_arch() {
     esac
 }
 
+# The podman install command for this Linux distro, read from os-release ($1, default
+# /etc/os-release), or nothing if the distro isn't recognized.
+podman_install_hint() {
+    ids=$(
+        [ -r "${1:-/etc/os-release}" ] && . "${1:-/etc/os-release}"
+        printf '%s %s' "${ID:-}" "${ID_LIKE:-}"
+    )
+    case " $ids " in
+        *" arch "*) echo "sudo pacman -S podman" ;;
+        *" fedora "* | *" rhel "* | *" centos "*) echo "sudo dnf install podman" ;;
+        *" debian "* | *" ubuntu "*) echo "sudo apt install podman" ;;
+        *" suse "* | *" opensuse "*) echo "sudo zypper install podman" ;;
+        *" alpine "*) echo "sudo apk add podman" ;;
+    esac
+}
+
 OS=$(detect_os)
 ARCH=$(detect_arch)
 ASSET="coder-${OS}-${ARCH}"
@@ -94,9 +110,14 @@ else
     say "podman: not found. coder needs it to run sandboxed agents. Install it with:"
     case "$OS" in
         linux)
-            say "  sudo pacman -S podman      # Arch"
-            say "  sudo apt install podman    # Debian/Ubuntu"
-            say "  sudo dnf install podman    # Fedora"
+            HINT=$(podman_install_hint)
+            if [ -n "$HINT" ]; then
+                say "  $HINT"
+            else
+                say "  sudo pacman -S podman      # Arch"
+                say "  sudo apt install podman    # Debian/Ubuntu"
+                say "  sudo dnf install podman    # Fedora"
+            fi
             ;;
         macos)
             say "  brew install podman && podman machine init && podman machine start"
