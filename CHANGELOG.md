@@ -41,6 +41,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `scripts/bump-version.sh`: sets the version in `Cargo.toml`,
   `Cargo.lock`, the plugin manifests, and the README badge. CI runs it
   with `--check` to catch versions that disagree.
+- The `run-in-sandbox` skill covers installing `coder` when it's
+  missing: with the install script rather than a source build, and with
+  Podman and API keys left to the user.
 
 ### Changed
 

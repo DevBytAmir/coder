@@ -28,6 +28,8 @@ run, wait for it, and review what it changed.
 
 1. **Preflight:** run `coder doctor --json`. Every check with
    `"status": "problem"` must be resolved first; `"info"` is fine.
+   - `coder: command not found`: `coder` isn't installed. See
+     [Installing coder](#installing-coder).
    - `--json` rejected as an unknown argument: this `coder` is too old for this
      skill. Tell the user to upgrade it.
    - `image ... not built`: run `coder build`. It takes several minutes; say so.
@@ -66,6 +68,33 @@ run, wait for it, and review what it changed.
 
 4. **Review:** `git -C <dir> status`, `git -C <dir> diff`, then run the project's
    tests. Don't commit unless the user asked you to.
+
+## Installing coder
+
+Only when `coder` is missing, and only once the user agrees, since this
+installs software on their machine.
+
+1. Install the prebuilt binary with the install script. Don't clone the
+   repository, build it with `cargo`, or install Rust: the script
+   downloads a checksum-verified release and needs none of that.
+
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/DevBytAmir/coder/main/scripts/install.sh | sh
+   ```
+
+   On Windows: `irm https://raw.githubusercontent.com/DevBytAmir/coder/main/scripts/install.ps1 | iex`.
+   It installs to `~/.local/bin`, or `%LOCALAPPDATA%\coder\bin` on Windows. If
+   it warns that this isn't on `PATH`, tell the user to add it: this skill
+   and its hook need `coder` on `PATH`.
+2. If the script reports that podman isn't found, ask the user to
+   install it. That needs their package manager and `sudo`, so don't do
+   it yourself.
+3. Build the container images with `coder build --fetch`. It takes
+   several minutes; say so.
+4. Ask the user to set up their provider keys themselves, with `coder
+   init` or by editing the secrets file. Never run `coder init` or touch
+   the secrets file yourself.
+5. Run the preflight again.
 
 ## Common mistakes
 
