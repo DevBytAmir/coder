@@ -5,6 +5,15 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- `coder models refresh` writes the generated opencode config to
+  `~/.config/coder/opencode.jsonc` instead of
+  `containers/sandbox/opencode.jsonc` in the current directory, so it
+  works outside a checkout. `coder build` bakes that file into the
+  sandbox image, and a plain `coder build` no longer resets opencode's
+  model picker to the shipped default.
+
 ### Fixed
 
 - `coder --help` no longer lists the internal `proxy-serve` command.

@@ -109,8 +109,9 @@ pub enum ConfigAction {
 #[derive(Subcommand)]
 pub enum ModelsAction {
     /// Fetch, filter, and write a provider's model list to
-    /// ~/.config/coder/models/<provider>.json, then regenerate opencode.jsonc from
-    /// every provider's refreshed list (run `coder build` afterward to apply it)
+    /// ~/.config/coder/models/<provider>.json, then regenerate
+    /// ~/.config/coder/opencode.jsonc from every provider's refreshed list (run `coder
+    /// build` afterward to apply it)
     Refresh {
         /// Provider to refresh (omit when using --all)
         provider: Option<String>,

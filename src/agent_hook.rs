@@ -22,7 +22,12 @@ pub struct HookInput {
 }
 
 /// Files under the coder config directory an agent may read: everything but secrets.
-const READABLE_CONFIG: &[&str] = &["/providers.toml", "/tools.toml", "/models"];
+const READABLE_CONFIG: &[&str] = &[
+    "/providers.toml",
+    "/tools.toml",
+    "/models",
+    "/opencode.jsonc",
+];
 
 const SECRETS_REASON: &str = "coder's secrets file holds real provider API keys and must \
      never enter the agent's context. If a key is missing, ask the user to add it.";
@@ -303,6 +308,7 @@ mod tests {
             "cat ~/.config/coder/providers.toml",
             "cat ~/.config/coder/tools.toml",
             "ls ~/.config/coder/models/",
+            "cat ~/.config/coder/opencode.jsonc",
             "coder run claude -C /home/u/project --yes -- -p 'tidy secrets.env handling'",
             "cat secrets.env",
         ] {

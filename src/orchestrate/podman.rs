@@ -15,14 +15,14 @@ const PROXY_URL_BASE: &str = "http://coder-proxy:8080";
 
 /// Build args for building the sandbox tool image.
 #[must_use]
-pub fn build_sandbox_image_args() -> Vec<String> {
+pub fn build_sandbox_image_args(context: &Path) -> Vec<String> {
     vec![
         "build".to_string(),
         "-t".to_string(),
         "coder-sandbox".to_string(),
         "-f".to_string(),
-        "containers/sandbox/Containerfile".to_string(),
-        "containers/sandbox".to_string(),
+        context.join("Containerfile").display().to_string(),
+        context.display().to_string(),
     ]
 }
 
@@ -839,7 +839,7 @@ mod tests {
 
     #[test]
     fn build_sandbox_image_args_uses_sandbox_containerfile_and_context() {
-        let args = build_sandbox_image_args();
+        let args = build_sandbox_image_args(Path::new("containers/sandbox"));
         let f_pos = args
             .iter()
             .position(|a| a == "-f")

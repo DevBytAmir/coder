@@ -234,7 +234,7 @@ shell, and `apply_patch` calls, and denies:
 
 - reading, editing, or searching `~/.config/coder/secrets.env` or the
   rest of the coder config directory, apart from `providers.toml`,
-  `tools.toml`, and `models/`
+  `tools.toml`, `models/`, and `opencode.jsonc`
 - `coder init`
 - `podman exec`, `inspect`, or `cp` on `coder-proxy`, and reading
   `/proc/<pid>/environ`, which would print the proxy's environment

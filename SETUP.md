@@ -217,12 +217,11 @@ coder build          # bake the regenerated list into the image
 ```
 
 Run `coder models refresh` for each provider you use, or `--all` to do
-every configured provider in one pass; it merges into one
-`opencode.jsonc`, with each model labeled by which provider(s) it
-came from. **Order matters**: `coder build` bakes in whatever's
-currently in `containers/sandbox/opencode.jsonc` on disk, so always
-refresh *before* building if you want the full catalog; running `coder
-build` on its own resets it back to the small shipped default.
+every configured provider in one pass, from any directory. It merges
+them into one `~/.config/coder/opencode.jsonc`, with each model labeled
+by which provider(s) it came from. `coder build` bakes that file into
+the sandbox image in place of the small shipped default, so refresh
+first, then build.
 
 For `aider`/`claude`, which take `--model` directly rather than having an
 in-app picker:
