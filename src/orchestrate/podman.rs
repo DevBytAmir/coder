@@ -839,15 +839,15 @@ mod tests {
 
     #[test]
     fn build_sandbox_image_args_uses_sandbox_containerfile_and_context() {
-        let args = build_sandbox_image_args(Path::new("containers/sandbox"));
+        let context = Path::new("containers/sandbox");
+        let args = build_sandbox_image_args(context);
         let f_pos = args
             .iter()
             .position(|a| a == "-f")
             .expect("missing -f flag");
-        assert_eq!(
-            args.get(f_pos + 1).map(String::as_str),
-            Some("containers/sandbox/Containerfile")
-        );
+        // built with Path::join, so the separator is the platform's (`\` on Windows)
+        let expected = context.join("Containerfile").display().to_string();
+        assert_eq!(args.get(f_pos + 1), Some(&expected));
         assert_eq!(args.last().map(String::as_str), Some("containers/sandbox"));
     }
 
