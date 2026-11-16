@@ -26,6 +26,7 @@ use coder::orchestrate::podman::{
 use coder::orchestrate::project_root::{existing_file_arg, resolve_project_dir};
 use coder::orchestrate::select::resolve_provider_for_run;
 use coder::orchestrate::sorted_joined;
+use coder::paths;
 use coder::secrets::{FileSource, SecretsSource};
 use coder::source_fetch::{fetch_source, find_existing_checkout, looks_like_source_checkout};
 
@@ -170,16 +171,14 @@ fn do_proxy_up(secrets_file: Option<&Path>) -> Result<()> {
     let real_keys = real_keys_for(&providers, secrets_file)?;
 
     // podman does no `~`/relative expansion for -v sources: pass absolute, canonical paths
-    let providers_file = providers_path()?
-        .canonicalize()
-        .context("resolving providers.toml path")?;
+    let providers_file =
+        paths::canonicalize(&providers_path()?).context("resolving providers.toml path")?;
     validate_bind_source(&providers_file)?;
     let secrets_file = match secrets_file {
         Some(p) => p.to_path_buf(),
         None => default_secrets_path()?,
-    }
-    .canonicalize()
-    .context("resolving secrets file path")?;
+    };
+    let secrets_file = paths::canonicalize(&secrets_file).context("resolving secrets file path")?;
     validate_bind_source(&secrets_file)?;
 
     ensure_networks()?;
@@ -311,11 +310,7 @@ fn do_run(args: &RunArgs) -> Result<i32> {
 
     let cwd = std::env::current_dir().context("determining current directory")?;
     // canonical once, up front: a relative -C must not become a podman named volume
-    let effective_cwd = args
-        .dir
-        .as_deref()
-        .unwrap_or(&cwd)
-        .canonicalize()
+    let effective_cwd = paths::canonicalize(args.dir.as_deref().unwrap_or(&cwd))
         .context("resolving -C directory")?;
     let root_arg = existing_file_arg(&effective_cwd, args.extra_args.first().map(String::as_str));
     let (project_dir, rewritten) =

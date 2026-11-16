@@ -83,6 +83,10 @@ This boots the same Linux VM that Podman uses on macOS; the native
 --release`) talks to it over the `podman` CLI exactly like on Linux,
 nothing about container orchestration is Windows-specific.
 
+Keep projects on a local drive (such as `C:\…`). Network and WSL paths
+(`\\server\share`, `\\wsl$\…`) can't be bind-mounted; for a project in
+the WSL filesystem, run `coder` inside WSL instead.
+
 ### Windows (via WSL2)
 
 If you'd rather run inside a Linux environment generally:

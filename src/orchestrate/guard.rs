@@ -3,6 +3,7 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::exit::{self, ExitError};
 use crate::orchestrate::project_root::find_git_root;
+use crate::paths;
 
 /// Directories that are never safe to sandbox. The sentinel `"home"` means the caller's
 /// actual home directory, every other entry is an absolute path. All but `"home"`, `"/"`,
@@ -23,7 +24,7 @@ const EXACT_MATCH_ONLY: &[&str] = &["home", "/", "/home"];
 /// to `/etc`.
 #[must_use]
 pub fn resolve_lexical(path: &Path) -> PathBuf {
-    if let Ok(canon) = path.canonicalize() {
+    if let Ok(canon) = paths::canonicalize(path) {
         return canon;
     }
     let mut out = PathBuf::new();

@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::config::tools::ProjectRoot;
+use crate::paths;
 
 /// The tool's first extra arg as an existing path, resolved against `effective_cwd` (the
 /// `-C` directory), never the process cwd.
@@ -45,13 +46,12 @@ pub fn resolve_project_dir(
                 Some(a) if a.exists() => a,
                 _ => return Ok((cwd.to_path_buf(), Vec::new())),
             };
-            let canon = arg.canonicalize()?;
+            let canon = paths::canonicalize(arg)?;
             let dirname = canon.parent().unwrap_or(&canon);
 
             let root = find_git_root(dirname).unwrap_or_else(|| dirname.to_path_buf());
-            // canon has a \\?\ prefix on Windows (from canonicalize); root may not,
-            // depending on its source, so canonicalize it too before strip_prefix.
-            let root = root.canonicalize().unwrap_or(root);
+            // git prints C:/... on Windows; match canon's form for strip_prefix
+            let root = paths::canonicalize(&root).unwrap_or(root);
 
             // Always a path inside a Linux container, so forward slashes regardless
             // of the host's own path separator.

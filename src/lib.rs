@@ -7,6 +7,7 @@ pub mod cli;
 pub mod config;
 pub mod exit;
 pub mod orchestrate;
+pub mod paths;
 pub mod proxy;
 pub mod secrets;
 pub mod source_fetch;

@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use crate::config::providers::{ProviderConfig, WireFormat};
 use crate::config::tools::ToolConfig;
+use crate::paths;
 
 /// Internal network shared by tool containers and the proxy: no egress.
 pub const NETWORK: &str = "coder-net";
@@ -90,6 +91,13 @@ pub fn validate_bind_source(path: &Path) -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("path {} is not valid UTF-8", path.display()))?;
     if !path.is_absolute() {
         anyhow::bail!("bind-mount source {text} must be an absolute path");
+    }
+    // a podman machine can't mount network or WSL paths
+    if paths::is_unc(path) {
+        anyhow::bail!(
+            "network and WSL paths (\\\\…) can't be bind-mounted: {text}. Use a folder on a \
+             local drive, or run coder inside WSL for projects in the Linux filesystem"
+        );
     }
     // ':' would otherwise collide with podman's `source:dest` bind-mount separator, but a
     // Windows drive letter ("C:\...") is exactly one colon at index 1; allow only that.
@@ -737,6 +745,9 @@ mod tests {
         {
             assert!(validate_bind_source(Path::new("C:\\Users\\a\\project")).is_ok());
             assert!(validate_bind_source(Path::new("C:\\Users\\a\\my:project")).is_err());
+            assert!(validate_bind_source(Path::new("E:\\")).is_ok());
+            assert!(validate_bind_source(Path::new(r"\\wsl$\Debian\home\a")).is_err());
+            assert!(validate_bind_source(Path::new(r"\\?\UNC\server\share\p")).is_err());
         }
         assert!(validate_bind_source(Path::new("myproject")).is_err());
     }

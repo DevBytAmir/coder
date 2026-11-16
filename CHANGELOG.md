@@ -37,6 +37,11 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 - `coder --help` no longer lists the internal `proxy-serve` command.
+- Native Windows: `coder run` and `coder proxy up` work. Every path failed
+  with "paths containing ':' are not supported for bind mounts", because
+  Windows' canonical paths start with `\\?\`, which coder now removes.
+- Native Windows: network and WSL paths (`\\server\share`, `\\wsl$\…`)
+  are refused with a clear error instead of being passed to podman.
 
 ## [0.5.0] - 2026-11-16
 
