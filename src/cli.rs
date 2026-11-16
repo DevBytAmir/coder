@@ -57,6 +57,7 @@ pub enum Command {
     /// Run a tool inside the sandbox
     Run(RunArgs),
     /// Serve the credential proxy (internal)
+    #[command(hide = true)]
     ProxyServe,
     /// Call the proxy's loopback-only admin API from inside the proxy container (internal)
     #[command(hide = true)]

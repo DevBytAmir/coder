@@ -5,6 +5,10 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `coder --help` no longer lists the internal `proxy-serve` command.
+
 ## [0.5.0] - 2026-11-16
 
 ### Added
