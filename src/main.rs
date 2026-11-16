@@ -727,7 +727,8 @@ fn binary_check(checks: &mut Vec<Check>) {
                 .ok()
                 .and_then(|path| {
                     std::env::split_paths(&path)
-                        .map(|dir| dir.join("coder"))
+                        // `coder.exe` on Windows
+                        .map(|dir| dir.join(format!("coder{}", std::env::consts::EXE_SUFFIX)))
                         .find(|candidate| candidate.exists())
                 })
                 .is_some();
@@ -951,7 +952,11 @@ impl Drop for CwdGuard {
 /// Where `coder build` keeps downloaded source, one directory per version.
 fn managed_source_dir(version: &str) -> Result<PathBuf> {
     Ok(home_dir()?
-        .join(".local/share/coder/source")
+        // separate joins, so Windows gets `\` throughout
+        .join(".local")
+        .join("share")
+        .join("coder")
+        .join("source")
         .join(format!("v{version}")))
 }
 
