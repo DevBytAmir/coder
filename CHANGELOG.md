@@ -70,6 +70,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - In WSL, a secrets file on a Windows drive (`/mnt/c/…`) gets an error
   that explains `chmod` can't fix its permissions there, instead of
   suggesting `chmod 600`.
+- `scripts/install.ps1`'s PATH hint adds the install folder to the User
+  PATH only, instead of copying the whole session PATH into it.
 
 ## [0.5.0] - 2026-11-16
 

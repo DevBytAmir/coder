@@ -64,7 +64,8 @@ try {
 if (-not ($env:Path -split ";" -contains $InstallDir)) {
     Write-Host ""
     Write-Host "warning: $InstallDir is not on your PATH. Add it with:"
-    Write-Host "  [Environment]::SetEnvironmentVariable('Path', `"`$env:Path;$InstallDir`", 'User')"
+    Write-Host "  [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';$InstallDir', 'User')"
+    Write-Host "  then open a new terminal."
 }
 
 Write-Host ""
