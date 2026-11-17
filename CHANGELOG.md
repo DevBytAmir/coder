@@ -72,6 +72,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   suggesting `chmod 600`.
 - `scripts/install.ps1`'s PATH hint adds the install folder to the User
   PATH only, instead of copying the whole session PATH into it.
+- `SETUP.md` lists the packages a source build needs: a C toolchain,
+  `pkg-config` and OpenSSL's headers.
 
 ## [0.5.0] - 2026-11-16
 

@@ -140,7 +140,23 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 Or your distro's packaged `rustup` (preferred on Linux if available, to
 stay inside your normal package-manager workflow, e.g. `sudo pacman -S
-rustup && rustup default stable` on Arch). Then:
+rustup && rustup default stable` on Arch).
+
+The build also needs a C toolchain and OpenSSL's headers (`reqwest` uses
+the system TLS library):
+
+```sh
+# Debian/Ubuntu (also in WSL)
+sudo apt install build-essential pkg-config libssl-dev
+# Fedora
+sudo dnf install gcc pkgconf-pkg-config openssl-devel
+# Arch
+sudo pacman -S base-devel openssl
+```
+
+On macOS, `xcode-select --install` provides the C toolchain. On Windows,
+rustup asks for the MSVC Build Tools. Nothing else is needed on either.
+Then:
 
 ```sh
 git clone https://github.com/DevBytAmir/coder.git
