@@ -36,6 +36,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- `url` is updated to 2.5.9 for RUSTSEC-2026-0592, a stack overflow in
+  `Url::origin()` that coder doesn't call.
 - `coder --help` no longer lists the internal `proxy-serve` command.
 - Native Windows: `coder run` and `coder proxy up` work. Every path failed
   with "paths containing ':' are not supported for bind mounts", because
