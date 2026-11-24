@@ -1,6 +1,6 @@
 [package]
 name = "coder"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.91"
 description = "Runs AI coding agents in rootless podman containers behind a proxy that holds the real API keys"

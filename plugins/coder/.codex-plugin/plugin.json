@@ -1,6 +1,6 @@
 {
   "name": "coder",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Codex plugin: run coding tasks in sandboxed autonomous agents through the coder CLI, without exposing provider API keys",
   "author": {
     "name": "DevBytAmir"

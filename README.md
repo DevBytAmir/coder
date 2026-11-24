@@ -5,7 +5,7 @@
 [![CI](https://github.com/DevBytAmir/coder/actions/workflows/ci.yml/badge.svg)](https://github.com/DevBytAmir/coder/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/rust-1.91%2B-2b2b2b?style=flat-square)](https://www.rust-lang.org/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-2b2b2b?style=flat-square)](./LICENSE)
-[![Version](https://img.shields.io/badge/version-0.5.0-2b2b2b?style=flat-square)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.6.0-2b2b2b?style=flat-square)](./CHANGELOG.md)
 
 </div>
 

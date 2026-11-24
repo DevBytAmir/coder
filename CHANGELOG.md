@@ -5,6 +5,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-24
+
 ### Added
 
 - `coder build` works outside a coder checkout without flags: it
@@ -241,7 +243,8 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Verified live end to end against real NVIDIA NIM, OpenRouter, and
   Ollama providers.
 
-[Unreleased]: https://github.com/DevBytAmir/coder/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/DevBytAmir/coder/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/DevBytAmir/coder/releases/tag/v0.6.0
 [0.5.0]: https://github.com/DevBytAmir/coder/releases/tag/v0.5.0
 [0.4.0]: https://github.com/DevBytAmir/coder/releases/tag/v0.4.0
 [0.3.0]: https://github.com/DevBytAmir/coder/releases/tag/v0.3.0
