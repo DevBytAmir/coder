@@ -2,6 +2,13 @@
 name = "coder"
 version = "0.5.0"
 edition = "2021"
+rust-version = "1.91"
+description = "Runs AI coding agents in rootless podman containers behind a proxy that holds the real API keys"
+license = "Apache-2.0"
+repository = "https://github.com/DevBytAmir/coder"
+readme = "README.md"
+keywords = ["ai", "agents", "sandbox", "podman", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [lib]
 name = "coder"

@@ -19,6 +19,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Release binaries and `SHA256SUMS.txt` come with a signed build
   provenance attestation; check one with `gh attestation verify <file>
   --repo DevBytAmir/coder`.
+- `Cargo.toml` declares the minimum Rust version, 1.91, and CI checks
+  that coder still builds with it. It also lists the license, description
+  and repository.
 
 ### Changed
 

@@ -62,6 +62,23 @@ jobs:
       - run: cargo clippy --all-targets --all-features --locked -- -D warnings -D clippy::all -D clippy::pedantic
       - run: scripts/bump-version.sh --check
 
+  msrv:
+    name: minimum Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.91
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: msrv-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - run: cargo check --all-targets --locked
+
   audit:
     name: cargo audit
     runs-on: ubuntu-latest

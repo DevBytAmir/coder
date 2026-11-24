@@ -140,7 +140,7 @@ gh attestation verify coder-linux-x86_64 --repo DevBytAmir/coder
 ### Option B: build from source
 
 Only for working on `coder` itself, or a platform without a release
-binary. This needs Rust; install it with:
+binary. This needs Rust 1.91 or newer; install it with:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh

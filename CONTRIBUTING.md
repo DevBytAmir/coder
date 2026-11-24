@@ -6,7 +6,7 @@ form on GitHub. Report security problems privately, as described in
 
 ## Building
 
-You need Rust (stable) and, for anything that runs containers, rootless
+You need Rust 1.91 or newer and, for anything that runs containers, rootless
 podman. See "Option B: build from source" in [SETUP.md](SETUP.md).
 
 ```sh
