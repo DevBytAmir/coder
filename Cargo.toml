@@ -28,7 +28,7 @@ serde_json = "1"
 http = "1"
 rpassword = "7"
 uuid = { version = "1", features = ["v4"] }
-axum = "0.7"
+axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 ctrlc = { version = "3", features = ["termination"] }
