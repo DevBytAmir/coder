@@ -16,6 +16,9 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   uses. These replace the `containers/sandbox` and `containers/proxy`
   checks, so `coder doctor --json` reports `config directory`, `model
   list`, and `build source` instead.
+- Release binaries and `SHA256SUMS.txt` come with a signed build
+  provenance attestation; check one with `gh attestation verify <file>
+  --repo DevBytAmir/coder`.
 
 ### Changed
 

@@ -129,6 +129,14 @@ whether `podman` is on your `PATH`. It doesn't need Rust. There's no
 local checkout this way; `coder build` in step 3 downloads what it
 needs.
 
+Release binaries come with a signed build provenance attestation, which
+shows that GitHub Actions built them from this repository. To check a
+binary you downloaded yourself:
+
+```sh
+gh attestation verify coder-linux-x86_64 --repo DevBytAmir/coder
+```
+
 ### Option B: build from source
 
 Only for working on `coder` itself, or a platform without a release
