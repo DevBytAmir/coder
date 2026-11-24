@@ -1,8 +1,9 @@
 # Contributing
 
-Bug reports and pull requests are welcome. For bugs, use the bug-report
-form on GitHub. Report security problems privately, as described in
-[SECURITY.md](SECURITY.md), not in a public issue or pull request.
+Bug reports, feature ideas and pull requests are welcome. Use the forms
+on GitHub for bugs and ideas. Report security problems privately, as
+described in [SECURITY.md](SECURITY.md), not in a public issue or pull
+request.
 
 ## Building
 
